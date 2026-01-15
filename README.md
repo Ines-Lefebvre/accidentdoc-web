@@ -1,4 +1,4 @@
-# Accident Doc
+# Accident-Doc
 
 Application web pour la génération de lettres de réserves AT/MP (Accidents du Travail / Maladies Professionnelles).
 
