@@ -1,0 +1,133 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 215 28% 23%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 28% 23%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 28% 23%;
+
+    --primary: 212 52% 24%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 215 28% 23%;
+
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 14% 46%;
+
+    --accent: 40 60% 58%;
+    --accent-foreground: 215 28% 17%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 20% 90%;
+    --input: 214 20% 90%;
+    --ring: 212 52% 24%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 215 28% 10%;
+    --foreground: 0 0% 95%;
+
+    --card: 215 28% 13%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 215 28% 13%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 40 60% 58%;
+    --primary-foreground: 215 28% 10%;
+
+    --secondary: 215 20% 20%;
+    --secondary-foreground: 0 0% 95%;
+
+    --muted: 215 20% 20%;
+    --muted-foreground: 215 14% 60%;
+
+    --accent: 40 60% 58%;
+    --accent-foreground: 215 28% 10%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 20% 25%;
+    --input: 215 20% 25%;
+    --ring: 40 60% 58%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading tracking-tight;
+  }
+}
+
+@layer components {
+  .container-app {
+    @apply max-w-4xl mx-auto px-4 py-8;
+  }
+  
+  .card-elevated {
+    @apply bg-card rounded-lg border shadow-sm p-6;
+  }
+  
+  .step-indicator {
+    @apply inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-medium;
+  }
+  
+  .step-indicator-inactive {
+    @apply inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted text-muted-foreground text-sm font-medium;
+  }
+}
+
+/* Animation pour le chargement */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 0%,
+    hsl(var(--background)) 50%,
+    hsl(var(--muted)) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Style pour le drag & drop */
+.dropzone-active {
+  @apply border-primary bg-primary/5;
+}
+
+/* Style pour l'enregistrement vocal */
+.recording-pulse {
+  @apply animate-pulse-slow;
+}
+
+.recording-indicator {
+  @apply w-3 h-3 rounded-full bg-red-500 animate-pulse;
+}
