@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Scale, AlertTriangle } from "lucide-react";
@@ -15,7 +15,7 @@ import { analyzeVocal, type UploadResponse, type VocalResponse } from "@/lib/n8n
 import { useToast } from "@/components/ui/toaster";
 import type { ExtractedData } from "@/types";
 
-export default function AnalysePage() {
+function AnalyseContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -62,7 +62,6 @@ export default function AnalysePage() {
         toast({
           title: "Enregistrement analysé",
           description: "Vos préoccupations ont été prises en compte.",
-          variant: "success",
         });
       }
     } catch (err) {
@@ -117,9 +116,9 @@ export default function AnalysePage() {
   };
 
   return (
-    <div className="min-h-screen bg-muted/30">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="border-b bg-background">
+      <header className="border-b bg-white">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <Scale className="h-6 w-6 text-primary" />
@@ -137,14 +136,14 @@ export default function AnalysePage() {
       </header>
 
       {/* Contenu */}
-      <main className="container-app">
+      <main className="container mx-auto px-4 py-8 max-w-4xl">
         <StepIndicator steps={CLIENT_STEPS} currentStep={1} className="mb-12" />
 
         <div className="text-center mb-8">
           <h1 className="font-heading text-3xl font-bold text-primary mb-2">
             Vérifiez les informations
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-gray-600">
             Voici les données extraites de votre document. Exprimez vos doutes
             ci-dessous.
           </p>
@@ -170,9 +169,9 @@ export default function AnalysePage() {
 
             {/* Alerte cas grave */}
             {isGraveCase && (
-              <Card className="border-destructive bg-destructive/10">
+              <Card className="border-red-500 bg-red-50">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-destructive flex items-center gap-2">
+                  <CardTitle className="text-red-600 flex items-center gap-2">
                     <AlertTriangle className="h-5 w-5" />
                     Situation particulière détectée
                   </CardTitle>
@@ -194,12 +193,12 @@ export default function AnalysePage() {
                   <CardTitle className="text-base">Votre témoignage</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm italic text-muted-foreground">
-                    "{vocalResponse.transcription}"
+                  <p className="text-sm italic text-gray-600">
+                    &quot;{vocalResponse.transcription}&quot;
                   </p>
                   {vocalResponse.arguments && vocalResponse.arguments.length > 0 && (
                     <div className="mt-4">
-                      <p className="text-xs font-medium text-muted-foreground uppercase mb-2">
+                      <p className="text-xs font-medium text-gray-500 uppercase mb-2">
                         Points identifiés
                       </p>
                       <ul className="space-y-1">
@@ -271,8 +270,7 @@ export default function AnalysePage() {
             {/* Bouton continuer */}
             <Button
               size="lg"
-              className="w-full"
-              variant="accent"
+              className="w-full bg-amber-600 hover:bg-amber-700"
               onClick={handleContinue}
               disabled={
                 isProcessingVocal ||
@@ -292,5 +290,17 @@ export default function AnalysePage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function AnalysePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse text-gray-500">Chargement...</div>
+      </div>
+    }>
+      <AnalyseContent />
+    </Suspense>
   );
 }
