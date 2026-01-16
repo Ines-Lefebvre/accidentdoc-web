@@ -89,8 +89,8 @@
   }
   
   .step-indicator {
-    @apply inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-medium;
-  }
+  @apply inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary text-white text-sm font-medium;
+}
   
   .step-indicator-inactive {
     @apply inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted text-muted-foreground text-sm font-medium;
