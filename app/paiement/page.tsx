@@ -114,7 +114,7 @@ function PaiementContent() {
           </p>
 
           <Cal
-            calLink="franck-lapuyade-ydsgco/rdv-avocat-accident-grave"
+            calLink="franck-lapuyade-ydsgrz/rdv-avocat-accident-grave"
             style={{ width: "100%", height: "600px", overflow: "scroll" }}
             config={{
               layout: "month_view",
