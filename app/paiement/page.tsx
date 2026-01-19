@@ -73,7 +73,9 @@ function PaiementContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email, name, phone,
+          email,
+          name,
+          phone,
           slot_start: selectedSlot.start,
           slot_end: selectedSlot.end,
           time_zone: selectedSlot.timeZone,
@@ -87,7 +89,9 @@ function PaiementContent() {
         sessionStorage.setItem("accidentdoc_checkout", JSON.stringify({
           appointmentId: data.appointmentId,
           sessionId: data.sessionId,
-          slot: selectedSlot, email, name,
+          slot: selectedSlot,
+          email,
+          name,
         }));
         window.location.href = data.checkoutUrl;
       } else {
@@ -154,54 +158,35 @@ function PaiementContent() {
             <span className="ml-2 font-medium">3. Paiement</span>
           </div>
         </div>
-        <Card className="mb-8">
-          <CardContent className="pt-6">
-            <div className="flex justify-between items-center">
-              <div><h2 className="text-lg font-semibold text-gray-900">Consultation téléphonique - 30 minutes</h2><p className="text-gray-600 text-sm">Avec un avocat spécialisé en droit du travail</p></div>
-              <div className="text-right"><p className="text-2xl font-bold text-gray-900">150€ HT</p><p className="text-sm text-gray-500">180€ TTC</p></div>
-            </div>
-          </CardContent>
-        </Card>
+        <Card className="mb-8"><CardContent className="pt-6"><div className="flex justify-between items-center"><div><h2 className="text-lg font-semibold text-gray-900">Consultation téléphonique - 30 minutes</h2><p className="text-gray-600 text-sm">Avec un avocat spécialisé en droit du travail</p></div><div className="text-right"><p className="text-2xl font-bold text-gray-900">150€ HT</p><p className="text-sm text-gray-500">180€ TTC</p></div></div></CardContent></Card>
         {step === "select" && (
-          <Card>
-            <CardHeader><CardTitle className="flex items-center"><Calendar className="w-5 h-5 mr-2" />Choisissez votre créneau</CardTitle></CardHeader>
-            <CardContent>
-              <p className="text-gray-600 text-sm mb-6">Sélectionnez une date et un horaire qui vous conviennent.<strong className="block mt-1">Le rendez-vous ne sera confirmé qu'après le paiement.</strong></p>
-              <div className="border rounded-lg overflow-hidden"><Cal calLink="franck-lapuyade-ydsgrz/rdv-avocat-accident-grave" style={{ width: "100%", height: "500px", overflow: "scroll" }} config={{ layout: "month_view", theme: "light" }} /></div>
-              <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-                <p className="text-sm text-blue-800 mb-3"><strong>Important :</strong> Après avoir vu les disponibilités ci-dessus, entrez manuellement le créneau souhaité :</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div><Label htmlFor="slotDate">Date et heure</Label><Input id="slotDate" type="datetime-local" onChange={(e) => { const start = new Date(e.target.value).toISOString(); const end = new Date(new Date(e.target.value).getTime() + 30 * 60000).toISOString(); setSelectedSlot({ start, end, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }); }} /></div>
-                  <div className="flex items-end"><Button onClick={() => selectedSlot && setStep("form")} disabled={!selectedSlot} className="w-full">Continuer</Button></div>
-                </div>
+          <Card><CardHeader><CardTitle className="flex items-center"><Calendar className="w-5 h-5 mr-2" />Choisissez votre créneau</CardTitle></CardHeader><CardContent>
+            <p className="text-gray-600 text-sm mb-6">Sélectionnez une date et un horaire qui vous conviennent.<strong className="block mt-1">Le rendez-vous ne sera confirmé qu'après le paiement.</strong></p>
+            <div className="border rounded-lg overflow-hidden"><Cal calLink="franck-lapuyade-ydsgrz/rdv-avocat-accident-grave" style={{ width: "100%", height: "500px", overflow: "scroll" }} config={{ layout: "month_view", theme: "light" }} /></div>
+            <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+              <p className="text-sm text-blue-800 mb-3"><strong>Important :</strong> Après avoir vu les disponibilités ci-dessus, entrez manuellement le créneau souhaité :</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div><Label htmlFor="slotDate">Date et heure</Label><Input id="slotDate" type="datetime-local" onChange={(e) => { const start = new Date(e.target.value).toISOString(); const end = new Date(new Date(e.target.value).getTime() + 30 * 60000).toISOString(); setSelectedSlot({ start, end, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }); }} /></div>
+                <div className="flex items-end"><Button onClick={() => selectedSlot && setStep("form")} disabled={!selectedSlot} className="w-full">Continuer</Button></div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </CardContent></Card>
         )}
         {step === "form" && (
-          <Card>
-            <CardHeader><CardTitle className="flex items-center"><User className="w-5 h-5 mr-2" />Vos coordonnées</CardTitle></CardHeader>
-            <CardContent>
-              {selectedSlot && (
-                <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                  <p className="text-sm text-gray-600">Créneau sélectionné :</p>
-                  <p className="font-semibold">{new Date(selectedSlot.start).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} à {new Date(selectedSlot.start).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</p>
-                  <button onClick={() => setStep("select")} className="text-blue-600 text-sm mt-2 hover:underline">Modifier le créneau</button>
-                </div>
-              )}
-              <div className="space-y-4">
-                <div><Label htmlFor="name">Nom complet *</Label><Input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jean Dupont" required /></div>
-                <div><Label htmlFor="email">Email *</Label><Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jean.dupont@email.com" required /></div>
-                <div><Label htmlFor="phone">Téléphone (pour le RDV)</Label><Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="06 12 34 56 78" /></div>
-              </div>
-              {error && <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
-              <div className="flex gap-4 mt-6">
-                <Button variant="outline" onClick={() => setStep("select")} disabled={isLoading}>Retour</Button>
-                <Button className="flex-1 bg-green-600 hover:bg-green-700" onClick={handleSubmitPayment} disabled={isLoading || !email || !name}>{isLoading ? <>Chargement...</> : <><CreditCard className="w-4 h-4 mr-2" />Payer 150€ et confirmer le RDV</>}</Button>
-              </div>
-              <p className="text-center text-gray-500 text-xs mt-4">Paiement sécurisé par Stripe. Le rendez-vous sera confirmé immédiatement après le paiement.</p>
-            </CardContent>
-          </Card>
+          <Card><CardHeader><CardTitle className="flex items-center"><User className="w-5 h-5 mr-2" />Vos coordonnées</CardTitle></CardHeader><CardContent>
+            {selectedSlot && <div className="bg-gray-50 rounded-lg p-4 mb-6"><p className="text-sm text-gray-600">Créneau sélectionné :</p><p className="font-semibold">{new Date(selectedSlot.start).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} à {new Date(selectedSlot.start).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</p><button onClick={() => setStep("select")} className="text-blue-600 text-sm mt-2 hover:underline">Modifier le créneau</button></div>}
+            <div className="space-y-4">
+              <div><Label htmlFor="name">Nom complet *</Label><Input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jean Dupont" required /></div>
+              <div><Label htmlFor="email">Email *</Label><Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jean.dupont@email.com" required /></div>
+              <div><Label htmlFor="phone">Téléphone (pour le RDV)</Label><Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="06 12 34 56 78" /></div>
+            </div>
+            {error && <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
+            <div className="flex gap-4 mt-6">
+              <Button variant="outline" onClick={() => setStep("select")} disabled={isLoading}>Retour</Button>
+              <Button className="flex-1 bg-green-600 hover:bg-green-700" onClick={handleSubmitPayment} disabled={isLoading || !email || !name}>{isLoading ? <>Chargement...</> : <><CreditCard className="w-4 h-4 mr-2" />Payer 150€ et confirmer le RDV</>}</Button>
+            </div>
+            <p className="text-center text-gray-500 text-xs mt-4">Paiement sécurisé par Stripe. Le rendez-vous sera confirmé immédiatement après le paiement.</p>
+          </CardContent></Card>
         )}
       </div>
     </div>
@@ -209,9 +194,5 @@ function PaiementContent() {
 }
 
 export default function PaiementPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-900 mx-auto"></div><p className="mt-4 text-gray-600">Chargement...</p></div>}>
-      <PaiementContent />
-    </Suspense>
-  );
+  return (<Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-900 mx-auto"></div><p className="mt-4 text-gray-600">Chargement...</p></div>}><PaiementContent /></Suspense>);
 }
