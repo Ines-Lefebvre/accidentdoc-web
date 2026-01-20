@@ -116,5 +116,10 @@ export interface Wf4SubmitResponse {
 // ENDPOINTS
 // ============================================
 
-export const WF4_GENERATE_ENDPOINT = "/webhook/generate-letter";
+/**
+ * ATTENTION: Le workflow n8n WF4a a son path configuré comme "/webhook/generate-letter"
+ * ce qui donne une URL finale avec double préfixe.
+ * TODO: Corriger le path dans n8n pour uniformiser avec WF1/WF3
+ */
+export const WF4_GENERATE_ENDPOINT = "/webhook/webhook/generate-letter";
 export const WF4_SUBMIT_ENDPOINT = "/webhook/submit-letter";
