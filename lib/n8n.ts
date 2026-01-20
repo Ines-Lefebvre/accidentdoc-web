@@ -1,206 +1,181 @@
-const N8N_BASE_URL = process.env.NEXT_PUBLIC_N8N_BASE_URL || "https://n8n.srv833062.hstgr.cloud";
+/**
+ * lib/n8n.ts - Client n8n pour AccidentDoc
+ *
+ * Ce fichier contient UNIQUEMENT :
+ * - La configuration de base (URL)
+ * - Les helpers typés pour appeler les webhooks
+ *
+ * Les types sont définis dans /contracts/
+ * Ce fichier est isomorphique (utilisable client et server)
+ */
 
-export interface UploadResponse {
-  ok: boolean;
-  requestId: string;
-  next?: string;
-  payload: {
-    success: boolean;
-    fallback_mode: boolean;
-    sessionId: string;
-    documentType: string;
-    extractedData: {
-      employeur: Record<string, unknown>;
-      victime: Record<string, unknown>;
-      accident: Record<string, unknown>;
-      temoin?: Record<string, unknown>;
-      tiers?: Record<string, unknown>;
-      interim?: Record<string, unknown>;
-    };
-    validationFields: Record<string, ValidationField>;
-    completionStats: {
-      totalFields: number;
-      filledFields: number;
-      completionRate: number;
-      requiredFields: number;
-      filledRequiredFields: number;
-      requiredCompletionRate: number;
-    };
-    nextStep: string;
-  };
-}
+import type {
+  Wf1UploadResponse,
+  Wf3VocalResponse,
+  Wf4LetterRequest,
+  Wf4LetterResponse,
+  Wf4SubmitRequest,
+  Wf4SubmitResponse,
+} from "@/contracts";
 
-export interface ValidationField {
-  label: string;
-  value: string | null;
-  section: string;
-  field: string;
-  required: boolean;
-  isEmpty: boolean;
-  needsValidation: boolean;
-}
+import {
+  WF1_ENDPOINT,
+  WF3_ENDPOINT,
+  WF4_GENERATE_ENDPOINT,
+  WF4_SUBMIT_ENDPOINT,
+} from "@/contracts";
 
-export interface VocalResponse {
-  success: boolean;
-  status: "analyzed" | "transcribed_only" | "grave_case" | "error" | "text_only";
-  is_grave: boolean;
-  transcription?: string;
-  arguments?: Array<{
-    category: string;
-    concern: string;
-    strength: "fort" | "moyen" | "faible";
-  }>;
-  summary?: string;
-  scenarios?: string[];
-  grave_keywords?: string[];
-  appointment_id?: string;
-  amount_cents?: number;
-  message?: string;
-  next_action?: string;
-}
+// ============================================
+// CONFIGURATION
+// ============================================
 
-// Nouvelle interface pour la réponse brouillon
-export interface DraftLetterResponse {
-  success: boolean;
-  status: "draft_ready" | "error";
-  letter_text: string;
-  scenarios: string[];
-  risk_flags: string[];
-  citations: string[];
-  quality: {
-    iterations: number;
-    was_refined: boolean;
-    scores: {
-      forme?: number;
-      fond?: number;
-      coherence?: number;
-    };
-  };
-  request_id: string;
-  context: {
-    victime_nom: string;
-    victime_prenom: string;
-    accident_date: string;
-    accident_heure?: string;
-    accident_lieu: string;
-    employeur_nom: string;
-    employeur_siret?: string;
-    temoin_present?: boolean;
-    temoin_nom?: string;
-  };
-  message: string;
-}
+/**
+ * URL de base n8n - utilise la variable d'environnement ou fallback
+ * NEXT_PUBLIC_ pour être accessible côté client
+ */
+export const N8N_BASE_URL =
+  process.env.NEXT_PUBLIC_N8N_BASE_URL || "https://n8n.srv833062.hstgr.cloud";
 
-// Ancienne interface conservée pour compatibilité
-export interface LetterResponse {
-  success: boolean;
-  status: string;
-  doc_url?: string;
-  validation_url?: string;
-  expires_at?: string;
-  letter_text?: string;
-  scenarios: string[];
-  risk_flags: string[];
-  message: string;
+// ============================================
+// HELPER GÉNÉRIQUE
+// ============================================
+
+/**
+ * Classe d'erreur pour les appels n8n
+ */
+export class N8nError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public endpoint: string
+  ) {
+    super(message);
+    this.name = "N8nError";
+  }
 }
 
 /**
- * Upload un document CERFA pour extraction OCR
+ * Appel JSON générique à un webhook n8n
  */
-export async function uploadDocument(file: File): Promise<UploadResponse> {
+export async function callN8n<TResponse>(
+  endpoint: string,
+  payload: unknown
+): Promise<TResponse> {
+  const url = `${N8N_BASE_URL}${endpoint}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new N8nError(
+      `Erreur n8n: ${response.statusText}`,
+      response.status,
+      endpoint
+    );
+  }
+
+  return response.json() as Promise<TResponse>;
+}
+
+/**
+ * Appel FormData à un webhook n8n (pour fichiers)
+ */
+export async function callN8nFormData<TResponse>(
+  endpoint: string,
+  formData: FormData
+): Promise<TResponse> {
+  const url = `${N8N_BASE_URL}${endpoint}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    throw new N8nError(
+      `Erreur n8n: ${response.statusText}`,
+      response.status,
+      endpoint
+    );
+  }
+
+  return response.json() as Promise<TResponse>;
+}
+
+// ============================================
+// FONCTIONS SPÉCIFIQUES AUX WORKFLOWS
+// ============================================
+
+/**
+ * WF1 - Upload un document CERFA pour extraction OCR
+ */
+export async function uploadDocument(file: File): Promise<Wf1UploadResponse> {
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(`${N8N_BASE_URL}/webhook/upload`, {
-    method: "POST",
-    body: formData,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Erreur upload: ${response.statusText}`);
-  }
-
-  return response.json();
+  return callN8nFormData<Wf1UploadResponse>(WF1_ENDPOINT, formData);
 }
 
 /**
- * Envoie un enregistrement vocal pour analyse
+ * WF3 - Envoie un enregistrement vocal pour analyse
  */
-export async function analyzeVocal(audioBlob: Blob): Promise<VocalResponse> {
+export async function analyzeVocal(audioBlob: Blob): Promise<Wf3VocalResponse> {
   const formData = new FormData();
   formData.append("audio", audioBlob, "recording.webm");
 
-  const response = await fetch(`${N8N_BASE_URL}/webhook/wf3-vocal`, {
-    method: "POST",
-    body: formData,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Erreur vocal: ${response.statusText}`);
-  }
-
-  return response.json();
+  return callN8nFormData<Wf3VocalResponse>(WF3_ENDPOINT, formData);
 }
 
 /**
- * Génère le brouillon de la lettre de réserves
+ * WF4a - Génère le brouillon de la lettre de réserves
  */
-export async function generateLetter(data: {
-  request_id: string;
-  user_id?: string;
-  customer_email: string;
-  validated_fields: Record<string, unknown>;
-  vocal_data?: VocalResponse;
-  document_type: string;
-}): Promise<DraftLetterResponse> {
-  const response = await fetch(`${N8N_BASE_URL}/webhook/generate-letter`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Erreur génération: ${response.statusText}`);
-  }
-
-  return response.json();
+export async function generateLetter(
+  data: Wf4LetterRequest
+): Promise<Wf4LetterResponse> {
+  return callN8n<Wf4LetterResponse>(WF4_GENERATE_ENDPOINT, data);
 }
 
 /**
- * Soumet le brouillon final pour validation avocat
- * (À implémenter dans un futur workflow)
+ * WF4b - Soumet le brouillon final pour validation
  */
-export async function submitFinalLetter(data: {
-  request_id: string;
-  letter_text: string;
-  customer_email: string;
-}): Promise<{ success: boolean; message: string; doc_url?: string }> {
-  // TODO: Implémenter WF4b modifié pour créer le doc final
-  const response = await fetch(`${N8N_BASE_URL}/webhook/submit-letter`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Erreur soumission: ${response.statusText}`);
-  }
-
-  return response.json();
+export async function submitFinalLetter(
+  data: Wf4SubmitRequest
+): Promise<Wf4SubmitResponse> {
+  return callN8n<Wf4SubmitResponse>(WF4_SUBMIT_ENDPOINT, data);
 }
 
 /**
  * Vérifie le statut d'un dossier
+ * TODO: Implémenter via Supabase ou endpoint dédié
  */
 export async function checkDossierStatus(requestId: string): Promise<{
   status: string;
   payment_status?: string;
   doc_url?: string;
 }> {
-  // TODO: Implémenter via Supabase ou un endpoint dédié
+  // TODO: Implémenter via Supabase
+  console.warn("checkDossierStatus not implemented, requestId:", requestId);
   return { status: "pending" };
 }
+
+// ============================================
+// RÉ-EXPORTS POUR RÉTRO-COMPATIBILITÉ
+// (à supprimer progressivement)
+// ============================================
+
+export type {
+  // Types principaux (aliases)
+  UploadResponse,
+  VocalResponse,
+  DraftLetterResponse,
+  LetterResponse,
+  // Types détaillés
+  ValidationField,
+  CompletionStats,
+  ExtractedData,
+  JuridicalArgument,
+  ReserveScenario,
+} from "@/contracts";
