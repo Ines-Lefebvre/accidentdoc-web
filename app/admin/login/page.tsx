@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -21,11 +21,19 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
 
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect") || "/admin";
   const urlError = searchParams.get("error");
+
+  // Debug: vérifier la configuration Supabase au chargement
+  useEffect(() => {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const hasKey = !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    setDebugInfo(`URL: ${supabaseUrl ? supabaseUrl.substring(0, 30) + "..." : "NON DÉFINIE"} | Key: ${hasKey ? "OK" : "MANQUANTE"}`);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,8 +60,9 @@ function LoginForm() {
       // Connexion réussie, rediriger
       router.push(redirect);
       router.refresh();
-    } catch (err) {
-      setError("Une erreur est survenue. Veuillez réessayer.");
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(`Erreur: ${errorMessage}`);
       console.error("Login error:", err);
     } finally {
       setLoading(false);
@@ -82,6 +91,12 @@ function LoginForm() {
                   : "Une erreur est survenue.")}
             </AlertDescription>
           </Alert>
+        )}
+
+        {debugInfo && (
+          <div className="mb-4 p-2 bg-slate-100 rounded text-xs text-slate-600 font-mono">
+            {debugInfo}
+          </div>
         )}
 
         <form onSubmit={handleLogin} className="space-y-4">

@@ -117,8 +117,24 @@
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
-        "specifyBody": "string",
-        "bodyString": "=mode=payment&success_url={{ encodeURIComponent('https://accidentdoc.fr/succes?session_id={CHECKOUT_SESSION_ID}&rid=' + $json.request_id) }}&cancel_url={{ encodeURIComponent('https://accidentdoc.fr/paiement?cancelled=true&rid=' + $json.request_id) }}&customer_email={{ encodeURIComponent($json.customer_email) }}&line_items[0][price_data][currency]=eur&line_items[0][price_data][product_data][name]={{ encodeURIComponent('Lettre de réserves AT/MP') }}&line_items[0][price_data][unit_amount]=8280&line_items[0][quantity]=1&metadata[type]=standard&metadata[request_id]={{ $json.request_id }}&metadata[customer_email]={{ encodeURIComponent($json.customer_email) }}&metadata[victime_nom]={{ encodeURIComponent($json.stripe_metadata.victime_nom) }}&metadata[accident_date]={{ encodeURIComponent($json.stripe_metadata.accident_date) }}",
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "mode", "value": "payment" },
+            { "name": "success_url", "value": "=https://accidentdoc.fr/succes?session_id={CHECKOUT_SESSION_ID}&rid={{ $json.request_id }}" },
+            { "name": "cancel_url", "value": "=https://accidentdoc.fr/paiement?cancelled=true&rid={{ $json.request_id }}" },
+            { "name": "customer_email", "value": "={{ $json.customer_email }}" },
+            { "name": "line_items[0][price_data][currency]", "value": "eur" },
+            { "name": "line_items[0][price_data][product_data][name]", "value": "Lettre de réserves AT/MP" },
+            { "name": "line_items[0][price_data][unit_amount]", "value": "8280" },
+            { "name": "line_items[0][quantity]", "value": "1" },
+            { "name": "metadata[type]", "value": "standard" },
+            { "name": "metadata[request_id]", "value": "={{ $json.request_id }}" },
+            { "name": "metadata[customer_email]", "value": "={{ $json.customer_email }}" },
+            { "name": "metadata[victime_nom]", "value": "={{ $json.stripe_metadata.victime_nom }}" },
+            { "name": "metadata[accident_date]", "value": "={{ $json.stripe_metadata.accident_date }}" }
+          ]
+        },
         "options": {
           "response": {
             "response": {
@@ -174,7 +190,7 @@
         "respondWith": "json",
         "responseBody": "={{ JSON.stringify($json) }}",
         "options": {
-          "responseCode": "200",
+          "responseCode": 200,
           "responseHeaders": {
             "entries": [
               {

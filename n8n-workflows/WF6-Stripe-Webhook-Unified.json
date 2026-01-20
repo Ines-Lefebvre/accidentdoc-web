@@ -1,0 +1,377 @@
+{
+  "name": "WF6 - Stripe Webhook Unified (Standard + Cas Grave)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "stripe-events",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-240, 0],
+      "id": "webhook-stripe",
+      "name": "Stripe Webhook",
+      "webhookId": "stripe-events"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parser l'événement Stripe et déterminer le type\nconst event = $input.first().json.body || $input.first().json;\n\n// Vérifier le type d'événement\nconst eventType = event.type || '';\n\nif (eventType !== 'checkout.session.completed') {\n  return {\n    success: false,\n    skip: true,\n    message: 'Event type ignoré: ' + eventType\n  };\n}\n\nconst session = event.data?.object || {};\nconst metadata = session.metadata || {};\n\n// Vérifier le statut du paiement\nif (session.payment_status !== 'paid') {\n  return {\n    success: false,\n    skip: true,\n    message: 'Paiement non complété: ' + session.payment_status\n  };\n}\n\n// Déterminer le type de paiement\nconst paymentType = metadata.type || 'unknown';\n\nif (paymentType === 'standard') {\n  // Paiement standard 69€ - envoyer lettre par email\n  return {\n    success: true,\n    skip: false,\n    paymentType: 'standard',\n    sessionId: session.id,\n    requestId: metadata.request_id,\n    customerEmail: metadata.customer_email || session.customer_email,\n    victimeNom: metadata.victime_nom || '',\n    accidentDate: metadata.accident_date || '',\n    amountPaid: session.amount_total,\n    paymentIntent: session.payment_intent\n  };\n} else if (paymentType === 'cas_grave') {\n  // Paiement cas grave 150€ - créer booking Cal.com\n  return {\n    success: true,\n    skip: false,\n    paymentType: 'cas_grave',\n    sessionId: session.id,\n    appointmentId: metadata.appointment_id,\n    customerEmail: metadata.customer_email || session.customer_email,\n    customerName: metadata.customer_name || 'Client',\n    slotStart: metadata.slot_start,\n    slotEnd: metadata.slot_end,\n    timeZone: metadata.time_zone || 'Europe/Paris',\n    transcription: metadata.transcription || '',\n    amountPaid: session.amount_total,\n    paymentIntent: session.payment_intent\n  };\n} else {\n  return {\n    success: false,\n    skip: true,\n    message: 'Type de paiement inconnu: ' + paymentType\n  };\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "id": "parse-event",
+      "name": "Parse Stripe Event"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [240, 0],
+      "id": "should-skip",
+      "name": "Should Skip?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.paymentType }}",
+              "rightValue": "standard",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [480, 100],
+      "id": "router-type",
+      "name": "Is Standard?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Réponse pour événements ignorés\nconst parseData = $('Parse Stripe Event').first().json;\n\nreturn {\n  success: true,\n  skipped: true,\n  message: parseData.message || 'Événement ignoré'\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, -200],
+      "id": "skip-response",
+      "name": "Skip Response"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"from\": \"Accident Doc <noreply@accidentdoc.fr>\",\n  \"to\": [\"{{ $json.customerEmail }}\"],\n  \"subject\": \"Votre lettre de réserves AT/MP - Accident Doc\",\n  \"html\": \"<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'><h1 style='color: #1e3a5f;'>Votre lettre de réserves est prête</h1><p>Bonjour,</p><p>Merci pour votre confiance. Votre paiement a bien été reçu.</p><div style='background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;'><p><strong>Référence :</strong> {{ $json.requestId }}</p><p><strong>Montant :</strong> {{ Math.floor($json.amountPaid / 100) }},{{ String($json.amountPaid % 100).padStart(2, '0') }} EUR</p></div><p>Votre lettre de réserves personnalisée est en pièce jointe de cet email.</p><p><strong>Prochaines étapes :</strong></p><ol><li>Téléchargez et imprimez la lettre</li><li>Signez-la</li><li>Envoyez-la en recommandé avec AR à votre CPAM dans les 48h</li></ol><p style='color: #666; font-size: 14px;'>Si vous avez des questions, répondez simplement à cet email.</p><hr style='margin: 30px 0; border: none; border-top: 1px solid #eee;'/><p style='color: #999; font-size: 12px;'>Accident Doc - Lettres de réserves AT/MP</p></div>\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 0],
+      "id": "send-letter-email",
+      "name": "Send Letter Email",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "RESEND_CREDENTIAL_ID",
+          "name": "Resend API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Réponse pour paiement standard\nconst parseData = $('Parse Stripe Event').first().json;\nconst emailResponse = $json;\n\nreturn {\n  success: true,\n  type: 'standard',\n  message: 'Email avec lettre envoyé',\n  requestId: parseData.requestId,\n  emailSent: emailResponse.id ? true : false,\n  emailId: emailResponse.id || null\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 0],
+      "id": "standard-response",
+      "name": "Standard Response"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cal.com/v2/bookings",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "cal-api-version",
+              "value": "2024-08-13"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"eventTypeId\": {{ $env.CAL_EVENT_TYPE_ID || 0 }},\n  \"start\": \"{{ $json.slotStart }}\",\n  \"attendee\": {\n    \"name\": \"{{ $json.customerName }}\",\n    \"email\": \"{{ $json.customerEmail }}\",\n    \"timeZone\": \"{{ $json.timeZone }}\",\n    \"language\": \"fr\"\n  },\n  \"metadata\": {\n    \"appointment_id\": \"{{ $json.appointmentId }}\",\n    \"stripe_session_id\": \"{{ $json.sessionId }}\",\n    \"payment_intent\": \"{{ $json.paymentIntent }}\",\n    \"source\": \"accident_doc_grave\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 200],
+      "id": "create-calcom-booking",
+      "name": "Create Cal.com Booking",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CALCOM_CREDENTIAL_ID",
+          "name": "Cal.com API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Préparer les données pour l'email de confirmation RDV\nconst bookingResponse = $json;\nconst parseData = $('Parse Stripe Event').first().json;\n\nconst bookingSuccess = bookingResponse.status === 'success' || bookingResponse.data?.id;\nconst bookingData = bookingResponse.data || bookingResponse;\n\nreturn {\n  bookingSuccess: bookingSuccess,\n  bookingId: bookingData.id || bookingData.uid || null,\n  bookingUid: bookingData.uid || null,\n  customerEmail: parseData.customerEmail,\n  customerName: parseData.customerName,\n  appointmentId: parseData.appointmentId,\n  slotStart: parseData.slotStart,\n  slotEnd: parseData.slotEnd,\n  timeZone: parseData.timeZone,\n  sessionId: parseData.sessionId,\n  calcomError: !bookingSuccess ? (bookingResponse.error?.message || JSON.stringify(bookingResponse)) : null\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 200],
+      "id": "prepare-rdv-email",
+      "name": "Prepare RDV Email Data"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"from\": \"Accident Doc <noreply@accidentdoc.fr>\",\n  \"to\": [\"{{ $json.customerEmail }}\"],\n  \"subject\": \"Confirmation de votre rendez-vous avocat - Accident Doc\",\n  \"html\": \"<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'><h1 style='color: #1e3a5f;'>Votre rendez-vous est confirmé</h1><p>Bonjour {{ $json.customerName }},</p><p>Nous vous confirmons votre rendez-vous avec notre avocate spécialisée en accidents du travail.</p><div style='background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;'><p><strong>Date :</strong> {{ $json.slotStart }}</p><p><strong>Durée :</strong> 30 minutes</p><p><strong>Type :</strong> Consultation téléphonique</p><p><strong>Référence :</strong> {{ $json.appointmentId }}</p></div><p>Notre avocate vous appellera à l'heure convenue sur le numéro que vous avez fourni.</p><p style='color: #666; font-size: 14px;'>Si vous avez des questions, répondez simplement à cet email.</p><hr style='margin: 30px 0; border: none; border-top: 1px solid #eee;'/><p style='color: #999; font-size: 12px;'>Accident Doc - Lettres de réserves AT/MP</p></div>\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 200],
+      "id": "send-rdv-email",
+      "name": "Send RDV Confirmation Email",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "RESEND_CREDENTIAL_ID",
+          "name": "Resend API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Réponse finale pour cas grave\nconst emailData = $('Prepare RDV Email Data').first().json;\nconst emailResponse = $json;\n\nreturn {\n  success: true,\n  type: 'cas_grave',\n  message: 'Booking créé et email envoyé',\n  bookingId: emailData.bookingId,\n  appointmentId: emailData.appointmentId,\n  emailSent: emailResponse.id ? true : false,\n  emailId: emailResponse.id || null\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 200],
+      "id": "cas-grave-response",
+      "name": "Cas Grave Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": "200"
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1680, 0],
+      "id": "respond-webhook",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "connections": {
+    "Stripe Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Stripe Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Stripe Event": {
+      "main": [
+        [
+          {
+            "node": "Should Skip?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Skip?": {
+      "main": [
+        [
+          {
+            "node": "Skip Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Standard?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Standard?": {
+      "main": [
+        [
+          {
+            "node": "Send Letter Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Cal.com Booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Letter Email": {
+      "main": [
+        [
+          {
+            "node": "Standard Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Standard Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Cal.com Booking": {
+      "main": [
+        [
+          {
+            "node": "Prepare RDV Email Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare RDV Email Data": {
+      "main": [
+        [
+          {
+            "node": "Send RDV Confirmation Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send RDV Confirmation Email": {
+      "main": [
+        [
+          {
+            "node": "Cas Grave Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cas Grave Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [
+    {
+      "name": "Accidoc"
+    },
+    {
+      "name": "Stripe"
+    }
+  ]
+}

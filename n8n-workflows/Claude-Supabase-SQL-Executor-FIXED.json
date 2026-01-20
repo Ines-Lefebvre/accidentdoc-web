@@ -1,0 +1,129 @@
+{
+  "name": "Claude - Supabase SQL Executor",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "claude-sql",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-sql",
+      "name": "Webhook SQL",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-112, 48],
+      "webhookId": "claude-sql-executor"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.body.sql }}",
+        "options": {}
+      },
+      "id": "postgres-execute",
+      "name": "Postgres - Execute SQL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [144, 48],
+      "credentials": {
+        "postgres": {
+          "id": "pewhdVfWthgBvQiY",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, rowCount: $input.all().length || 0, data: $input.all().map(i => i.json) }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [400, 48]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.error?.message || $json.message || 'SQL execution error' }) }}",
+        "options": {
+          "responseCode": 500,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-error",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [400, 256]
+    }
+  ],
+  "connections": {
+    "Webhook SQL": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Execute SQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Execute SQL": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [
+    {
+      "name": "Supabase"
+    },
+    {
+      "name": "Claude"
+    }
+  ]
+}
