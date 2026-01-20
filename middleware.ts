@@ -77,15 +77,18 @@ export async function middleware(request: NextRequest) {
   // On vérifie dans les metadata de l'utilisateur ou via une table admin_users
   const isAdmin =
     user.user_metadata?.role === "admin" ||
-    user.email?.endsWith("@accidentdoc.fr");
+    user.email?.endsWith("@accidentdoc.fr") ||
+    user.email === "franck.lapuyade@gmail.com"; // Temporaire pour debug
 
   if (!isAdmin) {
     // Vérifier dans la table admin_users si l'utilisateur est admin
-    const { data: adminUser } = await supabase
+    const { data: adminUser, error: adminError } = await supabase
       .from("admin_users")
       .select("id")
       .eq("user_id", user.id)
       .single();
+
+    console.log("Admin check for user:", user.id, "Result:", adminUser, "Error:", adminError);
 
     if (!adminUser) {
       // Pas admin, déconnecter et rediriger
