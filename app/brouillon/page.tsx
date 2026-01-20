@@ -137,10 +137,13 @@ function BrouillonContent() {
         request_id: draftResponse?.request_id,
         context: draftResponse?.context,
         scenarios: draftResponse?.scenarios,
+        risk_flags: draftResponse?.risk_flags,
+        quality: draftResponse?.quality,
         is_edited: isEdited,
       }));
-      toast({ title: "Brouillon enregistré", description: "Redirection..." });
-      router.push("/");
+      toast({ title: "Brouillon enregistré", description: "Redirection vers le paiement..." });
+      const rid = draftResponse?.request_id || requestId || "";
+      router.push(`/paiement?rid=${rid}`);
     } catch (err) {
       console.error("Erreur soumission:", err);
       toast({ title: "Erreur", description: "Impossible de soumettre.", variant: "destructive" });

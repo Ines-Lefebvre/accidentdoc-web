@@ -24,10 +24,25 @@ interface VocalData {
   appointmentId?: string;
 }
 
+interface DraftData {
+  letter_text: string;
+  request_id: string;
+  context?: {
+    victime_nom: string;
+    victime_prenom: string;
+    accident_date: string;
+    accident_lieu: string;
+    employeur_nom: string;
+  };
+  scenarios?: string[];
+  is_edited?: boolean;
+}
+
 function PaiementContent() {
   const searchParams = useSearchParams();
   const type = searchParams.get("type");
   const cancelled = searchParams.get("cancelled");
+  const requestId = searchParams.get("rid");
 
   const [step, setStep] = useState<"select" | "form" | "processing">("select");
   const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | null>(null);
@@ -37,15 +52,25 @@ function PaiementContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [vocalData, setVocalData] = useState<VocalData | null>(null);
+  const [draftData, setDraftData] = useState<DraftData | null>(null);
 
-  // Charger les données vocales depuis sessionStorage
+  // Charger les données du brouillon et vocales depuis sessionStorage
   useEffect(() => {
-    const stored = sessionStorage.getItem("accidentdoc_vocal");
-    if (stored) {
+    const vocalStored = sessionStorage.getItem("accidentdoc_vocal");
+    if (vocalStored) {
       try {
-        setVocalData(JSON.parse(stored));
+        setVocalData(JSON.parse(vocalStored));
       } catch (e) {
         console.error("Erreur parsing vocal data:", e);
+      }
+    }
+
+    const draftStored = sessionStorage.getItem("accidentdoc_draft");
+    if (draftStored) {
+      try {
+        setDraftData(JSON.parse(draftStored));
+      } catch (e) {
+        console.error("Erreur parsing draft data:", e);
       }
     }
   }, []);
@@ -136,22 +161,148 @@ function PaiementContent() {
   // Si ce n'est pas un cas grave, afficher le paiement standard
   if (type !== "grave") {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">
-            Paiement - Lettre de réserves
-          </h1>
-          <p className="text-gray-600 mb-6">
-            Montant : <span className="font-semibold">69€ HT</span> (82,80€ TTC)
-          </p>
-          <button
-            className="w-full bg-blue-900 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-800 transition"
-            onClick={() => {
-              alert("Paiement standard à implémenter");
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <div className="bg-white shadow">
+          <div className="max-w-2xl mx-auto px-4 py-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  Finalisation de votre lettre
+                </h1>
+                <p className="text-gray-600 mt-1">
+                  Récapitulatif avant paiement
+                </p>
+              </div>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/brouillon">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Retour
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-2xl mx-auto px-4 py-8">
+          {/* Récapitulatif du dossier */}
+          {draftData?.context && (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="text-lg">Récapitulatif du dossier</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500">Victime :</span>
+                    <p className="font-medium">{draftData.context.victime_prenom} {draftData.context.victime_nom}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Date de l&apos;accident :</span>
+                    <p className="font-medium">{draftData.context.accident_date}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Lieu :</span>
+                    <p className="font-medium">{draftData.context.accident_lieu}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Employeur :</span>
+                    <p className="font-medium">{draftData.context.employeur_nom}</p>
+                  </div>
+                </div>
+                {draftData.is_edited && (
+                  <p className="text-xs text-amber-600 mt-2">
+                    La lettre a été modifiée manuellement
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Tarification */}
+          <Card className="mb-6">
+            <CardContent className="pt-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Lettre de réserves personnalisée
+                  </h2>
+                  <p className="text-gray-600 text-sm">
+                    Document prêt à envoyer à la CPAM
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-bold text-gray-900">69€ HT</p>
+                  <p className="text-sm text-gray-500">82,80€ TTC</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Formulaire email */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center">
+                <Mail className="w-5 h-5 mr-2" />
+                Votre email
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="std-email">Email pour recevoir la lettre *</Label>
+                <Input
+                  id="std-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="votre.email@exemple.com"
+                  required
+                />
+              </div>
+              <p className="text-xs text-gray-500">
+                Vous recevrez votre lettre de réserves par email après le paiement.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Erreur */}
+          {error && (
+            <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              {error}
+            </div>
+          )}
+
+          {/* Bouton paiement */}
+          <Button
+            className="w-full bg-blue-900 hover:bg-blue-800 py-6 text-lg"
+            onClick={async () => {
+              if (!email) {
+                setError("Veuillez entrer votre email");
+                return;
+              }
+              setIsLoading(true);
+              setError(null);
+
+              // TODO: Appeler le workflow Stripe checkout standard
+              // Pour l'instant, afficher un message
+              alert(`Paiement standard - Fonctionnalité bientôt disponible.\n\nEmail: ${email}\nRequest ID: ${draftData?.request_id || requestId}`);
+              setIsLoading(false);
             }}
+            disabled={isLoading || !email}
           >
-            Procéder au paiement
-          </button>
+            {isLoading ? (
+              <>Chargement...</>
+            ) : (
+              <>
+                <CreditCard className="w-5 h-5 mr-2" />
+                Payer 82,80€ TTC et recevoir ma lettre
+              </>
+            )}
+          </Button>
+
+          <p className="text-center text-gray-500 text-xs mt-4">
+            Paiement sécurisé par Stripe. Vous recevrez votre lettre par email immédiatement.
+          </p>
         </div>
       </div>
     );
