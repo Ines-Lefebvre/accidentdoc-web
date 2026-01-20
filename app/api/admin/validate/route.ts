@@ -3,7 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Initialiser Resend seulement si la clé API est disponible
+const resend = process.env.RESEND_API_KEY
+  ? new Resend(process.env.RESEND_API_KEY)
+  : null;
 
 interface ValidateRequest {
   dossier_id: string;
@@ -45,6 +48,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Dossier non trouvé" },
         { status: 404 }
+      );
+    }
+
+    // Vérifier que Resend est configuré
+    if (!resend) {
+      return NextResponse.json(
+        { error: "Service d'email non configuré (RESEND_API_KEY manquant)" },
+        { status: 500 }
       );
     }
 

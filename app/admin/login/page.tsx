@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, AlertCircle, Scale } from "lucide-react";
 
-export default function AdminLoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -61,70 +61,86 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-            <Scale className="w-6 h-6 text-primary" />
+    <Card className="w-full max-w-md">
+      <CardHeader className="text-center">
+        <div className="mx-auto mb-4 w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+          <Scale className="w-6 h-6 text-primary" />
+        </div>
+        <CardTitle className="text-2xl">Espace Avocat</CardTitle>
+        <CardDescription>
+          Connectez-vous pour accéder à l&apos;interface de validation
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {(error || urlError) && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              {error ||
+                (urlError === "unauthorized"
+                  ? "Accès non autorisé. Veuillez vous connecter avec un compte administrateur."
+                  : "Une erreur est survenue.")}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="avocat@accidentdoc.fr"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              disabled={loading}
+            />
           </div>
-          <CardTitle className="text-2xl">Espace Avocat</CardTitle>
-          <CardDescription>
-            Connectez-vous pour accéder à l&apos;interface de validation
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {(error || urlError) && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                {error ||
-                  (urlError === "unauthorized"
-                    ? "Accès non autorisé. Veuillez vous connecter avec un compte administrateur."
-                    : "Une erreur est survenue.")}
-              </AlertDescription>
-            </Alert>
-          )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="avocat@accidentdoc.fr"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={loading}
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">Mot de passe</Label>
+            <Input
+              id="password"
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              disabled={loading}
+            />
+          </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Mot de passe</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={loading}
-              />
-            </div>
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Connexion...
+              </>
+            ) : (
+              "Se connecter"
+            )}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
 
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Connexion...
-                </>
-              ) : (
-                "Se connecter"
-              )}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+export default function AdminLoginPage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+      <Suspense
+        fallback={
+          <Card className="w-full max-w-md">
+            <CardContent className="pt-6 flex justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </CardContent>
+          </Card>
+        }
+      >
+        <LoginForm />
+      </Suspense>
     </div>
   );
 }
