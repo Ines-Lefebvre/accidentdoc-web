@@ -1,0 +1,301 @@
+{
+  "name": "WF5 - Checkout Standard (69€)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "checkout-standard",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        0
+      ],
+      "id": "webhook-checkout",
+      "name": "Webhook Checkout",
+      "webhookId": "checkout-standard"
+    },
+    {
+      "parameters": {
+        "httpMethod": "OPTIONS",
+        "path": "checkout-standard",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        200
+      ],
+      "id": "webhook-options",
+      "name": "OPTIONS",
+      "webhookId": "checkout-standard-options"
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        200
+      ],
+      "id": "cors-response",
+      "name": "CORS OK"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate & Prepare checkout data\nconst body = $input.first().json.body || $input.first().json;\n\n// Validation\nif (!body.customer_email) {\n  return {\n    valid: false,\n    error: 'Email requis'\n  };\n}\n\nif (!body.letter_text) {\n  return {\n    valid: false,\n    error: 'Lettre requise'\n  };\n}\n\nconst requestId = body.request_id || 'req_' + Date.now();\n\n// Préparer les données\nreturn {\n  valid: true,\n  request_id: requestId,\n  customer_email: body.customer_email,\n  letter_text: body.letter_text,\n  context: body.context || {},\n  // Metadata pour Stripe (sera utilisé dans le webhook après paiement)\n  stripe_metadata: {\n    type: 'standard',\n    request_id: requestId,\n    customer_email: body.customer_email,\n    victime_nom: (body.context?.victime_nom || '').substring(0, 100),\n    accident_date: (body.context?.accident_date || '').substring(0, 50)\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "validate-input",
+      "name": "Validate & Prepare"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        0
+      ],
+      "id": "check-valid",
+      "name": "Is Valid?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.stripe.com/v1/checkout/sessions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "string",
+        "bodyString": "=mode=payment&success_url={{ encodeURIComponent('https://accidentdoc.fr/succes?session_id={CHECKOUT_SESSION_ID}&rid=' + $json.request_id) }}&cancel_url={{ encodeURIComponent('https://accidentdoc.fr/paiement?cancelled=true&rid=' + $json.request_id) }}&customer_email={{ encodeURIComponent($json.customer_email) }}&line_items[0][price_data][currency]=eur&line_items[0][price_data][product_data][name]={{ encodeURIComponent('Lettre de réserves AT/MP') }}&line_items[0][price_data][unit_amount]=8280&line_items[0][quantity]=1&metadata[type]=standard&metadata[request_id]={{ $json.request_id }}&metadata[customer_email]={{ encodeURIComponent($json.customer_email) }}&metadata[victime_nom]={{ encodeURIComponent($json.stripe_metadata.victime_nom) }}&metadata[accident_date]={{ encodeURIComponent($json.stripe_metadata.accident_date) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        -100
+      ],
+      "id": "create-stripe-session",
+      "name": "Create Stripe Session",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "STRIPE_CREDENTIAL_ID",
+          "name": "Stripe API Key"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare success response\nconst stripeResponse = $json;\n\nif (stripeResponse.error) {\n  return {\n    success: false,\n    error: stripeResponse.error.message || 'Erreur Stripe'\n  };\n}\n\nreturn {\n  success: true,\n  checkout_url: stripeResponse.url,\n  session_id: stripeResponse.id\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        -100
+      ],
+      "id": "format-success",
+      "name": "Format Success Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare error response\nconst validateData = $('Validate & Prepare').first().json;\n\nreturn {\n  success: false,\n  error: validateData.error || 'Données invalides'\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        100
+      ],
+      "id": "format-error",
+      "name": "Format Error Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": "200",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        0
+      ],
+      "id": "final-response",
+      "name": "Response"
+    }
+  ],
+  "connections": {
+    "Webhook Checkout": {
+      "main": [
+        [
+          {
+            "node": "Validate & Prepare",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OPTIONS": {
+      "main": [
+        [
+          {
+            "node": "CORS OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Prepare": {
+      "main": [
+        [
+          {
+            "node": "Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "Create Stripe Session",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Stripe Session": {
+      "main": [
+        [
+          {
+            "node": "Format Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Success Response": {
+      "main": [
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error Response": {
+      "main": [
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [
+    {
+      "name": "Accidoc"
+    }
+  ]
+}

@@ -16,6 +16,8 @@ import type {
   Wf4LetterResponse,
   Wf4SubmitRequest,
   Wf4SubmitResponse,
+  Wf5CheckoutRequest,
+  Wf5CheckoutResponse,
 } from "@/contracts";
 
 import {
@@ -23,6 +25,7 @@ import {
   WF3_ENDPOINT,
   WF4_GENERATE_ENDPOINT,
   WF4_SUBMIT_ENDPOINT,
+  WF5_CHECKOUT_ENDPOINT,
 } from "@/contracts";
 
 // ============================================
@@ -145,6 +148,15 @@ export async function submitFinalLetter(
   data: Wf4SubmitRequest
 ): Promise<Wf4SubmitResponse> {
   return callN8n<Wf4SubmitResponse>(WF4_SUBMIT_ENDPOINT, data);
+}
+
+/**
+ * WF5 - Crée une session Stripe Checkout pour le paiement standard (69€)
+ */
+export async function createCheckoutSession(
+  data: Wf5CheckoutRequest
+): Promise<Wf5CheckoutResponse> {
+  return callN8n<Wf5CheckoutResponse>(WF5_CHECKOUT_ENDPOINT, data);
 }
 
 /**

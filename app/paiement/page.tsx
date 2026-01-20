@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { createCheckoutSession } from "@/lib/n8n";
 
 const N8N_BASE_URL = process.env.NEXT_PUBLIC_N8N_BASE_URL || "https://n8n.srv833062.hstgr.cloud";
 
@@ -280,13 +281,39 @@ function PaiementContent() {
                 setError("Veuillez entrer votre email");
                 return;
               }
+              if (!draftData?.letter_text) {
+                setError("Données de lettre manquantes. Veuillez revenir à l'étape précédente.");
+                return;
+              }
               setIsLoading(true);
               setError(null);
 
-              // TODO: Appeler le workflow Stripe checkout standard
-              // Pour l'instant, afficher un message
-              alert(`Paiement standard - Fonctionnalité bientôt disponible.\n\nEmail: ${email}\nRequest ID: ${draftData?.request_id || requestId}`);
-              setIsLoading(false);
+              try {
+                const response = await createCheckoutSession({
+                  request_id: draftData.request_id || requestId || `req_${Date.now()}`,
+                  customer_email: email,
+                  letter_text: draftData.letter_text,
+                  context: draftData.context,
+                });
+
+                if (response.success && response.checkout_url) {
+                  // Sauvegarder avant redirection
+                  sessionStorage.setItem("accidentdoc_checkout", JSON.stringify({
+                    session_id: response.session_id,
+                    request_id: draftData.request_id,
+                    email,
+                  }));
+                  // Rediriger vers Stripe Checkout
+                  window.location.href = response.checkout_url;
+                } else {
+                  setError(response.error || "Erreur lors de la création du paiement");
+                }
+              } catch (err) {
+                console.error("Erreur checkout:", err);
+                setError("Impossible de contacter le serveur de paiement. Veuillez réessayer.");
+              } finally {
+                setIsLoading(false);
+              }
             }}
             disabled={isLoading || !email}
           >

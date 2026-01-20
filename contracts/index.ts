@@ -41,6 +41,13 @@ export type {
 } from "./wf4-letter";
 export { WF4_GENERATE_ENDPOINT, WF4_SUBMIT_ENDPOINT } from "./wf4-letter";
 
+// WF5 - Checkout Standard
+export type {
+  Wf5CheckoutRequest,
+  Wf5CheckoutResponse,
+} from "./wf5-checkout";
+export { WF5_CHECKOUT_ENDPOINT } from "./wf5-checkout";
+
 // ============================================
 // Aliases pour rétro-compatibilité
 // (à supprimer progressivement)

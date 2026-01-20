@@ -1,0 +1,595 @@
+{
+  "name": "Accident Doc - WF4a Génération Lettre V3 (SANS DOCS)",
+  "nodes": [
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        368,
+        1008
+      ],
+      "id": "d1344c47-f563-4c46-aa5e-2b846fea943b",
+      "name": "Réponse"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format Response - Prépare la réponse JSON conforme à Wf4LetterResponse\nconst critiqueData = $('Parse Critique').first().json;\n\nreturn {\n  success: true,\n  status: 'draft_ready',\n  letter_text: critiqueData.letter_text,\n  scenarios: critiqueData.scenarios,\n  risk_flags: critiqueData.risk_flags,\n  citations: critiqueData.citations || [],\n  quality: {\n    iterations: critiqueData.retry_count,\n    was_refined: critiqueData.retry_count > 0,\n    scores: critiqueData.scores || {}\n  },\n  request_id: critiqueData.request_id,\n  context: critiqueData.context,\n  message: 'Brouillon généré avec succès.'\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        128,
+        1008
+      ],
+      "id": "20d8e3cc-1326-49f7-8604-1cf7faf870f0",
+      "name": "Format Response"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "retry_count",
+              "name": "retry_count",
+              "value": "={{ $json.retry_count + 1 }}",
+              "type": "number"
+            },
+            {
+              "id": "feedback",
+              "name": "feedback",
+              "value": "={{ $json.critic_feedback }}",
+              "type": "string"
+            },
+            {
+              "id": "scenarios",
+              "name": "scenarios",
+              "value": "={{ $json.scenarios }}",
+              "type": "array"
+            },
+            {
+              "id": "justifications",
+              "name": "justifications",
+              "value": "={{ $json.justifications }}",
+              "type": "array"
+            },
+            {
+              "id": "context",
+              "name": "context",
+              "value": "={{ $json.context }}",
+              "type": "object"
+            },
+            {
+              "id": "request_id",
+              "name": "request_id",
+              "value": "={{ $json.request_id }}",
+              "type": "string"
+            },
+            {
+              "id": "user_id",
+              "name": "user_id",
+              "value": "={{ $json.user_id }}",
+              "type": "string"
+            },
+            {
+              "id": "customer_email",
+              "name": "customer_email",
+              "value": "={{ $json.customer_email }}",
+              "type": "string"
+            },
+            {
+              "id": "vocal_summary",
+              "name": "vocal_summary",
+              "value": "={{ $('Init Loop').first().json.vocal_summary }}",
+              "type": "string"
+            },
+            {
+              "id": "vocal_transcription",
+              "name": "vocal_transcription",
+              "value": "={{ $('Init Loop').first().json.vocal_transcription }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        128,
+        1424
+      ],
+      "id": "92e89bb9-8601-403e-ab54-d738305184e5",
+      "name": "Update Loop"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-valid",
+              "leftValue": "={{ $json.is_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "condition-max-retry",
+              "leftValue": "={{ $json.retry_count }}",
+              "rightValue": 3,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -128,
+        1216
+      ],
+      "id": "d475b44b-8c75-4261-9b36-1f5901f5b6d3",
+      "name": "Validation OK?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse critic response\nlet text = $input.first().json.text || '';\ntext = text.replace(/```json\\n?/g, '').replace(/```/g, '').trim();\n\nconst prev = $('Parse Lettre').first().json;\n\ntry {\n  const result = JSON.parse(text);\n  return {\n    is_valid: result.is_valid === true,\n    critic_feedback: result.feedback || '',\n    scores: result.scores || {},\n    letter_text: prev.letter_text,\n    risk_flags: prev.risk_flags,\n    citations: prev.citations,\n    scenarios: prev.scenarios,\n    justifications: prev.justifications,\n    request_id: prev.request_id,\n    user_id: prev.user_id,\n    customer_email: prev.customer_email,\n    context: prev.context,\n    retry_count: prev.retry_count\n  };\n} catch (e) {\n  // En cas d'erreur de parsing, considérer comme invalide\n  return {\n    is_valid: false,\n    critic_feedback: 'Erreur de parsing de la critique. Veuillez reformuler la lettre.',\n    scores: {},\n    letter_text: prev.letter_text,\n    risk_flags: prev.risk_flags,\n    citations: prev.citations,\n    scenarios: prev.scenarios,\n    justifications: prev.justifications,\n    request_id: prev.request_id,\n    user_id: prev.user_id,\n    customer_email: prev.customer_email,\n    context: prev.context,\n    retry_count: prev.retry_count\n  };\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -368,
+        1216
+      ],
+      "id": "357fa927-ba2b-47fd-a21c-ca29775b49b2",
+      "name": "Parse Critique"
+    },
+    {
+      "parameters": {
+        "prompt": "=Tu es un CRITIQUE expert en droit AT/MP et en rédaction juridique. Ton rôle est de valider la qualité de la lettre générée.\n\nLETTRE À ÉVALUER:\n{{ $json.letter_text }}\n\nCONTEXTE DE L'ACCIDENT:\n- Victime: {{ $json.context.victime_prenom }} {{ $json.context.victime_nom }}\n- Date: {{ $json.context.accident_date }}\n- Lieu: {{ $json.context.accident_lieu }}\n- Employeur: {{ $json.context.employeur_nom }}\n\nSCÉNARIOS ATTENDUS:\n{{ JSON.stringify($json.scenarios) }}\n\nCRITÈRES D'ÉVALUATION (tous doivent être satisfaits):\n\n1. **FORME** (ton et style):\n   - Ton professionnel et mesuré (pas agressif ni subjectif)\n   - Structure claire: Objet, Faits, Réserves, Demande\n   - Formules de politesse appropriées\n   - Pas de fautes d'orthographe ou de syntaxe\n\n2. **FOND** (contenu juridique):\n   - Les scénarios de réserves sont correctement développés\n   - Citations légales pertinentes (L.411-1, L.441-1 CSS si applicable)\n   - Arguments factuels et non spéculatifs\n   - Demande d'enquête claire\n\n3. **COHÉRENCE** (adéquation au contexte):\n   - Les informations de la victime sont correctes\n   - Dates et lieux correspondent\n   - Les réserves sont justifiées par les faits\n\nRÈGLES D'ÉVALUATION:\n- Si TOUS les critères sont satisfaits → is_valid = true\n- Si UN SEUL critère n'est pas satisfait → is_valid = false + feedback détaillé\n- Le feedback doit être ACTIONNABLE et PRÉCIS\n\nRéponds UNIQUEMENT en JSON strict (pas de texte avant/après):\n{\n  \"is_valid\": true/false,\n  \"feedback\": \"Si is_valid=false: liste précise des corrections à apporter. Si is_valid=true: chaîne vide\",\n  \"scores\": {\n    \"forme\": 1-10,\n    \"fond\": 1-10,\n    \"coherence\": 1-10\n  }\n}",
+        "options": {
+          "maxTokens": 800,
+          "temperature": 0.1
+        },
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        -608,
+        1216
+      ],
+      "id": "78459e8d-99c3-47c2-a3a7-578f9208ab0b",
+      "name": "Critic IA",
+      "credentials": {
+        "openAiApi": {
+          "id": "ReY01TMBOwF2KV4Q",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse letter response\nlet text = $input.first().json.text || '';\ntext = text.replace(/```json\\n?/g, '').replace(/```/g, '').trim();\n\n// Récupérer les données de la boucle (Init Loop ou Update Loop)\nlet prev;\ntry {\n  prev = $('Update Loop').first().json;\n} catch (e) {\n  prev = $('Init Loop').first().json;\n}\n\ntry {\n  const result = JSON.parse(text);\n  return {\n    letter_text: result.letter_text || '',\n    risk_flags: result.risk_flags || [],\n    citations: result.citations || [],\n    scenarios: prev.scenarios,\n    justifications: prev.justifications,\n    request_id: prev.request_id,\n    user_id: prev.user_id,\n    customer_email: prev.customer_email,\n    context: prev.context,\n    retry_count: prev.retry_count,\n    feedback: prev.feedback\n  };\n} catch (e) {\n  // Fallback: utiliser le texte brut comme lettre\n  return {\n    letter_text: text,\n    risk_flags: ['Parsing failed - review needed'],\n    citations: [],\n    scenarios: prev.scenarios,\n    justifications: prev.justifications,\n    request_id: prev.request_id,\n    user_id: prev.user_id,\n    customer_email: prev.customer_email,\n    context: prev.context,\n    retry_count: prev.retry_count,\n    feedback: prev.feedback\n  };\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -848,
+        1216
+      ],
+      "id": "cce02cd0-6e08-4c11-9981-4a585e8d6026",
+      "name": "Parse Lettre"
+    },
+    {
+      "parameters": {
+        "prompt": "=Tu es avocat expert AT/MP. Génère une lettre de réserves.\n\n{% if $json.feedback && $json.feedback !== '' %}\n⚠️ CRITIQUE PRÉCÉDENTE - PRENDS EN COMPTE CES RETOURS:\n{{ $json.feedback }}\n\nRéécris la lettre en corrigeant les points mentionnés ci-dessus.\n{% endif %}\n\nDESTINATAIRE: CPAM\n\nVICTIME: {{ $json.context.victime_prenom }} {{ $json.context.victime_nom }}\nDATE ACCIDENT: {{ $json.context.accident_date }}\nHEURE: {{ $json.context.accident_heure || 'Non précisée' }}\nLIEU: {{ $json.context.accident_lieu }}\nEMPLOYEUR: {{ $json.context.employeur_nom }} (SIRET: {{ $json.context.employeur_siret || 'Non précisé' }})\nTÉMOIN: {{ $json.context.temoin_present ? $json.context.temoin_nom : 'Aucun' }}\n\nSCÉNARIOS DE RÉSERVES:\n{{ JSON.stringify($json.scenarios) }}\n\nJUSTIFICATIONS:\n{{ JSON.stringify($json.justifications) }}\n\nDOUTES EXPRIMÉS PAR L'EMPLOYEUR:\n{{ $json.vocal_summary || $json.vocal_transcription || 'Aucun commentaire vocal' }}\n\nINSTRUCTIONS:\n1. Lettre formelle et professionnelle\n2. Citer articles L.411-1 et L.441-1 CSS si pertinent\n3. Réserves factuelles, non accusatoires\n4. Structure: Objet, Faits, Réserves motivées, Demande d'enquête\n5. Ton mesuré et juridiquement précis\n6. Pas de formulations agressives ou subjectives\n\nRéponds en JSON:\n{\"letter_text\": \"texte complet de la lettre\", \"risk_flags\": [], \"citations\": []}",
+        "options": {
+          "maxTokens": 2000,
+          "temperature": 0.3
+        },
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        -1088,
+        1216
+      ],
+      "id": "3140a620-0ab8-42b6-9bde-f54201e05608",
+      "name": "Writer IA (Actor)",
+      "credentials": {
+        "openAiApi": {
+          "id": "ReY01TMBOwF2KV4Q",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "retry_count",
+              "name": "retry_count",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "feedback",
+              "name": "feedback",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "scenarios",
+              "name": "scenarios",
+              "value": "={{ $json.scenarios }}",
+              "type": "array"
+            },
+            {
+              "id": "justifications",
+              "name": "justifications",
+              "value": "={{ $json.justifications }}",
+              "type": "array"
+            },
+            {
+              "id": "context",
+              "name": "context",
+              "value": "={{ $json.context }}",
+              "type": "object"
+            },
+            {
+              "id": "request_id",
+              "name": "request_id",
+              "value": "={{ $json.request_id }}",
+              "type": "string"
+            },
+            {
+              "id": "user_id",
+              "name": "user_id",
+              "value": "={{ $json.user_id }}",
+              "type": "string"
+            },
+            {
+              "id": "customer_email",
+              "name": "customer_email",
+              "value": "={{ $json.customer_email }}",
+              "type": "string"
+            },
+            {
+              "id": "vocal_summary",
+              "name": "vocal_summary",
+              "value": "={{ $json.vocal_summary }}",
+              "type": "string"
+            },
+            {
+              "id": "vocal_transcription",
+              "name": "vocal_transcription",
+              "value": "={{ $json.vocal_transcription }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1328,
+        1216
+      ],
+      "id": "a5958c8f-d6f4-48e9-b3ac-29bd354d5a8a",
+      "name": "Init Loop"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse classifier response\nlet text = $input.first().json.text || '';\ntext = text.replace(/```json\\n?/g, '').replace(/```/g, '').trim();\n\nconst prev = $('Extract & Format').first().json;\n\ntry {\n  const result = JSON.parse(text);\n  return {\n    scenarios: result.scenarios || ['NON_IMPUTABLE'],\n    justifications: result.justifications || [],\n    ...prev\n  };\n} catch (e) {\n  return {\n    scenarios: prev.vocal_scenarios.length > 0 ? prev.vocal_scenarios : ['NON_IMPUTABLE'],\n    justifications: [],\n    ...prev\n  };\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1568,
+        1216
+      ],
+      "id": "599ac89f-295c-41b2-8a78-32b3616f90e0",
+      "name": "Parse Scénarios"
+    },
+    {
+      "parameters": {
+        "prompt": "=RÔLE: Classifier les scénarios de réserves AT/MP.\n\nCONTEXTE ACCIDENT:\n{{ JSON.stringify($json.context) }}\n\nARGUMENTS VOCAUX DU CLIENT:\n{{ JSON.stringify($json.vocal_arguments) }}\n\nTRANSCRIPTION DOUTES:\n{{ $json.vocal_transcription }}\n\nCATÉGORIES POSSIBLES:\n- HORS_HORAIRES: accident hors temps de travail\n- HORS_LIEU: accident hors lieu de travail/mission\n- TIERS: tiers impliqué\n- PREEXISTANTS: état pathologique préexistant\n- SANS_TEMOIN: absence de témoin\n- CIRCONSTANCES_FLOUES: circonstances mal définies\n- DELAI_DECLARATION: délai anormal\n- NON_IMPUTABLE: doutes sur l'imputabilité\n\nRÈGLES:\n- Analyser le contexte ET les arguments vocaux\n- Prioriser les arguments forts\n- Maximum 4 scénarios\n\nRéponds UNIQUEMENT en JSON:\n{\"scenarios\": [\"CAT1\", \"CAT2\"], \"justifications\": [{\"scenario\": \"CAT1\", \"reason\": \"...\"}]}",
+        "options": {
+          "maxTokens": 800,
+          "temperature": 0.2
+        },
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        -1808,
+        1216
+      ],
+      "id": "cbbb09bb-a6b7-4b55-971a-0393c9eef5e3",
+      "name": "Classifier IA",
+      "credentials": {
+        "openAiApi": {
+          "id": "ReY01TMBOwF2KV4Q",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraction et formatage des données d'entrée\nconst body = $input.first().json.body || $input.first().json;\n\n// Fonctions de formatage\nfunction ddmmyyyy(raw) {\n  if (!raw) return null;\n  const s = String(raw).replace(/[^\\d]/g, '');\n  if (s.length === 8) return `${s.slice(0,2)}/${s.slice(2,4)}/${s.slice(4,8)}`;\n  return raw;\n}\n\nfunction hhmm(raw) {\n  if (!raw) return null;\n  const s = String(raw).replace(/[^\\d]/g, '');\n  if (s.length === 4) return `${s.slice(0,2)}:${s.slice(2,4)}`;\n  return raw;\n}\n\n// Données OCR validées\nconst validated = body.validated_fields || {};\nconst victime = validated.victime || {};\nconst accident = validated.accident || {};\nconst employeur = validated.employeur || {};\nconst temoin = validated.temoin || {};\n\n// Doutes vocaux (from WF3)\nconst vocal = body.vocal_data || {};\n\nreturn {\n  // Identifiants\n  request_id: body.request_id || 'req_' + Date.now(),\n  user_id: body.user_id,\n  customer_email: body.customer_email,\n  payment_id: body.payment_id,\n  \n  // Contexte formaté pour l'IA\n  context: {\n    victime_nom: victime.nom || '{{NOM}}',\n    victime_prenom: victime.prenom || '{{PRENOM}}',\n    accident_date: ddmmyyyy(accident.date) || '{{DATE}}',\n    accident_heure: hhmm(accident.heure),\n    accident_lieu: accident.lieu || '{{LIEU}}',\n    circonstances: accident.circonstances || accident.nature_accident || '',\n    employeur_nom: employeur.nom_raison_sociale || '{{EMPLOYEUR}}',\n    employeur_siret: employeur.siret,\n    temoin_present: !!(temoin.nom),\n    temoin_nom: temoin.nom\n  },\n  \n  // Arguments vocaux enrichis\n  vocal_arguments: vocal.arguments || [],\n  vocal_scenarios: vocal.scenarios || [],\n  vocal_summary: vocal.summary || '',\n  vocal_transcription: vocal.transcription || '',\n  \n  // Type de document\n  document_type: body.document_type || 'AT_normale'\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2048,
+        1216
+      ],
+      "id": "bdd627d7-d8c7-4b8b-bb2d-df449a77b702",
+      "name": "Extract & Format"
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -2080,
+        1424
+      ],
+      "id": "23d001a2-d467-478c-a04d-47337ad9a84b",
+      "name": "CORS OK"
+    },
+    {
+      "parameters": {
+        "httpMethod": "OPTIONS",
+        "path": "generate-letter",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2288,
+        1424
+      ],
+      "id": "71160628-8504-40c6-8b43-a090021a079d",
+      "name": "OPTIONS",
+      "webhookId": "options-generate"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-letter",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2288,
+        1216
+      ],
+      "id": "24326c1f-bcb2-42e5-bbb4-2711c141f3ae",
+      "name": "Webhook Lettre",
+      "webhookId": "generate-letter"
+    }
+  ],
+  "connections": {
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Réponse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Loop": {
+      "main": [
+        [
+          {
+            "node": "Writer IA (Actor)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation OK?": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Critique": {
+      "main": [
+        [
+          {
+            "node": "Validation OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Critic IA": {
+      "main": [
+        [
+          {
+            "node": "Parse Critique",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Lettre": {
+      "main": [
+        [
+          {
+            "node": "Critic IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Writer IA (Actor)": {
+      "main": [
+        [
+          {
+            "node": "Parse Lettre",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Init Loop": {
+      "main": [
+        [
+          {
+            "node": "Writer IA (Actor)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Scénarios": {
+      "main": [
+        [
+          {
+            "node": "Init Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classifier IA": {
+      "main": [
+        [
+          {
+            "node": "Parse Scénarios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract & Format": {
+      "main": [
+        [
+          {
+            "node": "Classifier IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OPTIONS": {
+      "main": [
+        [
+          {
+            "node": "CORS OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Lettre": {
+      "main": [
+        [
+          {
+            "node": "Extract & Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [
+    {
+      "name": "Accidoc"
+    }
+  ]
+}
