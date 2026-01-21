@@ -33,3 +33,7 @@ Application de generation de lettres de reserves AT/MP (69 EUR vs 150 EUR avocat
 - Frontend : Messages d'erreur explicites selon error_type
   - contracts/wf1-upload.ts : ajout types error_type + errorDetails
   - app/upload/page.tsx : switch sur error_type avec messages FR
+- Fix build Vercel : restauration package.json (Next.js 14, Tailwind v3)
+  - Problème : merge git avait écrasé package.json avec version minimale
+  - Correction erreurs TypeScript (vérification extractedData optionnel)
+  - app/analyse/page.tsx et app/brouillon/page.tsx corrigés
