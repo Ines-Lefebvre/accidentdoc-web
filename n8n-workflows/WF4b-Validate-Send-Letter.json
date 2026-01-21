@@ -1,0 +1,391 @@
+{
+  "name": "AccidentDoc - WF4b Validation & Envoi Lettre",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "validate-letter",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-400, 0],
+      "id": "webhook-validate",
+      "name": "Webhook Validate",
+      "webhookId": "validate-letter"
+    },
+    {
+      "parameters": {
+        "httpMethod": "OPTIONS",
+        "path": "validate-letter",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-400, 200],
+      "id": "options-validate",
+      "name": "OPTIONS",
+      "webhookId": "options-validate-letter"
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Access-Control-Allow-Methods", "value": "POST, OPTIONS" },
+              { "name": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-160, 200],
+      "id": "cors-ok",
+      "name": "CORS OK"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraire les données de la requête\nconst body = $input.first().json.body || $input.first().json;\n\nconst dossierId = body.dossier_id;\nconst requestId = body.request_id;\nconst action = body.action || 'validate'; // 'validate' ou 'reject'\nconst lawyerNotes = body.lawyer_notes || '';\nconst modifiedLetterText = body.modified_letter_text || null;\n\nif (!dossierId && !requestId) {\n  return {\n    error: true,\n    message: 'dossier_id ou request_id requis'\n  };\n}\n\nreturn {\n  error: false,\n  dossierId: dossierId,\n  requestId: requestId,\n  action: action,\n  lawyerNotes: lawyerNotes,\n  modifiedLetterText: modifiedLetterText\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-160, 0],
+      "id": "extract-data",
+      "name": "Extract Data"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [80, 0],
+      "id": "check-error",
+      "name": "Has Error?"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT id, request_id, customer_email, customer_name, letter_text, status, victime_nom, accident_date\nFROM dossiers \nWHERE {{ $json.dossierId ? \"id = '\" + $json.dossierId + \"'\" : \"request_id = '\" + $json.requestId + \"'\" }}\nAND status = 'letter_generated'",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [320, 100],
+      "id": "fetch-dossier",
+      "name": "Fetch Dossier",
+      "credentials": {
+        "postgres": {
+          "id": "pewhdVfWthgBvQiY",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Vérifier si le dossier existe et est prêt pour validation\nconst items = $input.all();\nconst extractData = $('Extract Data').first().json;\n\nif (items.length === 0 || !items[0].json.id) {\n  return {\n    found: false,\n    error: 'Dossier non trouvé ou pas en status letter_generated'\n  };\n}\n\nconst dossier = items[0].json;\n\n// Utiliser le texte modifié par l'avocate si fourni, sinon le texte original\nconst letterText = extractData.modifiedLetterText || dossier.letter_text;\n\nreturn {\n  found: true,\n  dossierId: dossier.id,\n  requestId: dossier.request_id,\n  customerEmail: dossier.customer_email,\n  customerName: dossier.customer_name || 'Client',\n  letterText: letterText,\n  victimeNom: dossier.victime_nom,\n  accidentDate: dossier.accident_date,\n  action: extractData.action,\n  lawyerNotes: extractData.lawyerNotes\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [560, 100],
+      "id": "check-dossier",
+      "name": "Check Dossier"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.found }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [800, 100],
+      "id": "dossier-found",
+      "name": "Dossier Found?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "validate",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1040, 0],
+      "id": "action-validate",
+      "name": "Is Validate?"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE dossiers SET\n  status = 'lawyer_validated',\n  letter_text = $1,\n  lawyer_notes = $2,\n  validated_at = NOW(),\n  updated_at = NOW()\nWHERE id = $3\nRETURNING id, request_id, customer_email",
+        "options": {
+          "queryReplacement": "={{ [$json.letterText, $json.lawyerNotes || '', $json.dossierId] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1280, -100],
+      "id": "update-validated",
+      "name": "Update Status Validated",
+      "credentials": {
+        "postgres": {
+          "id": "pewhdVfWthgBvQiY",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"from\": \"Accident Doc <noreply@accidentdoc.fr>\",\n  \"to\": [\"{{ $('Check Dossier').first().json.customerEmail }}\"],\n  \"subject\": \"Votre lettre de réserves AT/MP est prête - Accident Doc\",\n  \"html\": \"<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'><h1 style='color: #1e3a5f;'>Votre lettre de réserves est prête</h1><p>Bonjour {{ $('Check Dossier').first().json.customerName }},</p><p>Bonne nouvelle ! Votre lettre de réserves a été <strong>validée par notre avocate</strong> et est maintenant prête à être envoyée.</p><div style='background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;'><p><strong>Référence :</strong> {{ $('Check Dossier').first().json.requestId }}</p><p><strong>Victime :</strong> {{ $('Check Dossier').first().json.victimeNom }}</p><p><strong>Date accident :</strong> {{ $('Check Dossier').first().json.accidentDate }}</p></div><div style='background: #e8f4f8; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #1e3a5f;'><h3 style='margin-top: 0;'>Prochaines étapes :</h3><ol style='margin-bottom: 0;'><li>Téléchargez la lettre ci-jointe</li><li>Imprimez-la et signez-la</li><li><strong>Envoyez-la en recommandé avec AR à votre CPAM sous 48h</strong></li></ol></div><p>La lettre est jointe à cet email au format PDF.</p><p style='color: #666; font-size: 14px;'>Si vous avez des questions, répondez simplement à cet email.</p><hr style='margin: 30px 0; border: none; border-top: 1px solid #eee;'/><p style='color: #999; font-size: 12px;'>Accident Doc - Lettres de réserves AT/MP<br/>Validée par Maître [Nom Avocate], avocate au Barreau de [Ville]</p></div>\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1520, -100],
+      "id": "send-letter-email",
+      "name": "Send Letter Email",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "RESEND_CREDENTIAL_ID",
+          "name": "Resend API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE dossiers SET\n  status = 'email_sent',\n  email_sent_at = NOW(),\n  updated_at = NOW()\nWHERE id = '{{ $('Check Dossier').first().json.dossierId }}'",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1760, -100],
+      "id": "update-email-sent",
+      "name": "Update Email Sent",
+      "credentials": {
+        "postgres": {
+          "id": "pewhdVfWthgBvQiY",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Réponse succès validation + envoi\nconst checkData = $('Check Dossier').first().json;\nconst emailResponse = $('Send Letter Email').first().json;\n\nreturn {\n  success: true,\n  action: 'validated_and_sent',\n  message: 'Lettre validée et email envoyé au client',\n  dossierId: checkData.dossierId,\n  requestId: checkData.requestId,\n  customerEmail: checkData.customerEmail,\n  emailId: emailResponse.id || null,\n  status: 'email_sent'\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, -100],
+      "id": "success-response",
+      "name": "Success Response"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE dossiers SET\n  status = 'lawyer_rejected',\n  lawyer_notes = $1,\n  updated_at = NOW()\nWHERE id = $2\nRETURNING id, request_id",
+        "options": {
+          "queryReplacement": "={{ [$json.lawyerNotes || 'Rejeté par avocate', $json.dossierId] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1280, 100],
+      "id": "update-rejected",
+      "name": "Update Status Rejected",
+      "credentials": {
+        "postgres": {
+          "id": "pewhdVfWthgBvQiY",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Réponse rejet\nconst checkData = $('Check Dossier').first().json;\n\nreturn {\n  success: true,\n  action: 'rejected',\n  message: 'Lettre rejetée par avocate',\n  dossierId: checkData.dossierId,\n  requestId: checkData.requestId,\n  lawyerNotes: checkData.lawyerNotes,\n  status: 'lawyer_rejected'\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1520, 100],
+      "id": "rejected-response",
+      "name": "Rejected Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Réponse erreur - dossier non trouvé\nconst checkData = $json;\n\nreturn {\n  success: false,\n  error: checkData.error || 'Dossier non trouvé ou pas prêt pour validation',\n  status: null\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1040, 200],
+      "id": "not-found-response",
+      "name": "Not Found Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Réponse erreur - paramètres invalides\nconst extractData = $('Extract Data').first().json;\n\nreturn {\n  success: false,\n  error: extractData.message || 'Paramètres invalides',\n  status: null\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [320, -100],
+      "id": "error-response",
+      "name": "Error Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Content-Type", "value": "application/json" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2240, 0],
+      "id": "respond",
+      "name": "Respond"
+    }
+  ],
+  "connections": {
+    "Webhook Validate": {
+      "main": [[{ "node": "Extract Data", "type": "main", "index": 0 }]]
+    },
+    "OPTIONS": {
+      "main": [[{ "node": "CORS OK", "type": "main", "index": 0 }]]
+    },
+    "Extract Data": {
+      "main": [[{ "node": "Has Error?", "type": "main", "index": 0 }]]
+    },
+    "Has Error?": {
+      "main": [
+        [{ "node": "Error Response", "type": "main", "index": 0 }],
+        [{ "node": "Fetch Dossier", "type": "main", "index": 0 }]
+      ]
+    },
+    "Error Response": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    },
+    "Fetch Dossier": {
+      "main": [[{ "node": "Check Dossier", "type": "main", "index": 0 }]]
+    },
+    "Check Dossier": {
+      "main": [[{ "node": "Dossier Found?", "type": "main", "index": 0 }]]
+    },
+    "Dossier Found?": {
+      "main": [
+        [{ "node": "Is Validate?", "type": "main", "index": 0 }],
+        [{ "node": "Not Found Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Is Validate?": {
+      "main": [
+        [{ "node": "Update Status Validated", "type": "main", "index": 0 }],
+        [{ "node": "Update Status Rejected", "type": "main", "index": 0 }]
+      ]
+    },
+    "Update Status Validated": {
+      "main": [[{ "node": "Send Letter Email", "type": "main", "index": 0 }]]
+    },
+    "Send Letter Email": {
+      "main": [[{ "node": "Update Email Sent", "type": "main", "index": 0 }]]
+    },
+    "Update Email Sent": {
+      "main": [[{ "node": "Success Response", "type": "main", "index": 0 }]]
+    },
+    "Success Response": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    },
+    "Update Status Rejected": {
+      "main": [[{ "node": "Rejected Response", "type": "main", "index": 0 }]]
+    },
+    "Rejected Response": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    },
+    "Not Found Response": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [
+    { "name": "Accidoc" },
+    { "name": "Avocat" },
+    { "name": "Supabase" }
+  ]
+}
