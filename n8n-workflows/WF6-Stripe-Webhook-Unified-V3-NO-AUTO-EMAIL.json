@@ -94,14 +94,14 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "=INSERT INTO dossiers (\n  request_id,\n  customer_email,\n  customer_name,\n  payment_id,\n  status,\n  document_type,\n  pdf_storage_path,\n  validated_fields,\n  vocal_data,\n  victime_nom,\n  accident_date,\n  amount_paid\n) VALUES (\n  '{{ $json.requestId }}',\n  '{{ $json.customerEmail }}',\n  '{{ $json.customerName }}',\n  '{{ $json.paymentIntent }}',\n  'paid',\n  '{{ $json.documentType }}',\n  {{ $json.pdfStoragePath ? \"'\" + $json.pdfStoragePath + \"'\" : 'NULL' }},\n  {{ $json.validatedFields ? \"'\" + JSON.stringify($json.validatedFields).replace(/'/g, \"''\") + \"'::jsonb\" : 'NULL' }},\n  {{ $json.vocalData ? \"'\" + JSON.stringify($json.vocalData).replace(/'/g, \"''\") + \"'::jsonb\" : 'NULL' }},\n  '{{ $json.victimeNom }}',\n  '{{ $json.accidentDate }}',\n  {{ $json.amountPaid }}\n)\nON CONFLICT (request_id) DO UPDATE SET\n  payment_id = EXCLUDED.payment_id,\n  status = 'paid',\n  updated_at = NOW()\nRETURNING id",
+        "query": "=-- Mettre à jour le dossier créé par WF5 (status pending_payment -> letter_generated)\n-- La lettre est déjà stockée par WF5, on met juste à jour le statut et les infos de paiement\nUPDATE dossiers SET\n  customer_name = '{{ $json.customerName }}',\n  payment_id = '{{ $json.paymentIntent }}',\n  status = 'letter_generated',\n  amount_paid = {{ $json.amountPaid }},\n  updated_at = NOW()\nWHERE request_id = '{{ $json.requestId }}'\nRETURNING id, letter_text IS NOT NULL as has_letter",
         "options": {}
       },
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [720, 0],
-      "id": "postgres-insert-standard",
-      "name": "Insert Dossier (Standard)",
+      "id": "postgres-update-standard",
+      "name": "Update Dossier (Standard)",
       "credentials": {
         "postgres": {
           "id": "pewhdVfWthgBvQiY",
@@ -112,7 +112,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Réponse pour paiement standard - PAS d'email envoyé\n// L'email sera envoyé après validation par l'avocate (WF4b)\nconst parseData = $('Parse Stripe Event').first().json;\nconst dbResult = $input.first().json;\n\nreturn {\n  success: true,\n  type: 'standard',\n  message: 'Dossier créé - en attente de génération et validation de la lettre',\n  dossierId: dbResult.id || null,\n  requestId: parseData.requestId,\n  customerEmail: parseData.customerEmail,\n  status: 'paid',\n  nextStep: 'letter_generation'\n};"
+        "jsCode": "// Réponse pour paiement standard - PAS d'email envoyé\n// La lettre existe déjà (stockée par WF5), en attente de validation par l'avocate\nconst parseData = $('Parse Stripe Event').first().json;\nconst dbResult = $input.first().json;\n\nreturn {\n  success: true,\n  type: 'standard',\n  message: 'Paiement reçu - dossier mis à jour, en attente de validation avocate',\n  dossierId: dbResult.id || null,\n  hasLetter: dbResult.has_letter || false,\n  requestId: parseData.requestId,\n  customerEmail: parseData.customerEmail,\n  status: 'letter_generated',\n  nextStep: 'lawyer_validation'\n};"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -280,7 +280,7 @@
       "main": [
         [
           {
-            "node": "Insert Dossier (Standard)",
+            "node": "Update Dossier (Standard)",
             "type": "main",
             "index": 0
           }
@@ -305,7 +305,7 @@
         ]
       ]
     },
-    "Insert Dossier (Standard)": {
+    "Update Dossier (Standard)": {
       "main": [
         [
           {

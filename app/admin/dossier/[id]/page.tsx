@@ -46,7 +46,7 @@ interface Dossier {
   customer_email: string;
   customer_name: string | null;
   letter_text: string;
-  status: "paid" | "letter_generated" | "lawyer_validated" | "lawyer_rejected" | "email_sent" | "rdv_booked";
+  status: "pending_payment" | "paid" | "letter_generated" | "lawyer_validated" | "lawyer_rejected" | "email_sent" | "rdv_booked";
   created_at: string;
   validated_at: string | null;
   victime_nom?: string | null;

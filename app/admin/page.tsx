@@ -25,7 +25,7 @@ interface Dossier {
   request_id: string;
   customer_email: string;
   customer_name: string | null;
-  status: "paid" | "letter_generated" | "lawyer_validated" | "lawyer_rejected" | "email_sent" | "rdv_booked";
+  status: "pending_payment" | "paid" | "letter_generated" | "lawyer_validated" | "lawyer_rejected" | "email_sent" | "rdv_booked";
   created_at: string;
   letter_text?: string | null;
   victime_nom?: string | null;
@@ -37,6 +37,11 @@ interface Dossier {
 }
 
 const statusConfig: Record<string, { label: string; variant: "secondary" | "default" | "outline" | "destructive"; icon: typeof Clock }> = {
+  pending_payment: {
+    label: "En attente paiement",
+    variant: "outline",
+    icon: Clock,
+  },
   paid: {
     label: "Payé - En attente génération",
     variant: "secondary",
