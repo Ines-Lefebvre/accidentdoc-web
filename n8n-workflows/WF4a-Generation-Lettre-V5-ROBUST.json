@@ -1,0 +1,205 @@
+{
+  "name": "Accident Doc - WF4a Génération Lettre V5 (ROBUST)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-letter",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-2288, 1216],
+      "id": "24326c1f-bcb2-42e5-bbb4-2711c141f3ae",
+      "name": "Webhook Lettre",
+      "webhookId": "generate-letter"
+    },
+    {
+      "parameters": {
+        "httpMethod": "OPTIONS",
+        "path": "generate-letter",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-2288, 1424],
+      "id": "71160628-8504-40c6-8b43-a090021a079d",
+      "name": "OPTIONS",
+      "webhookId": "options-generate"
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Access-Control-Allow-Methods", "value": "POST, OPTIONS" },
+              { "name": "Access-Control-Allow-Headers", "value": "Content-Type" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-2080, 1424],
+      "id": "23d001a2-d467-478c-a04d-47337ad9a84b",
+      "name": "CORS OK"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraction et formatage des données d'entrée\nconst body = $input.first().json.body || $input.first().json;\n\n// Fonctions de formatage\nfunction ddmmyyyy(raw) {\n  if (!raw) return null;\n  const s = String(raw).replace(/[^\\d]/g, '');\n  if (s.length === 8) return `${s.slice(0,2)}/${s.slice(2,4)}/${s.slice(4,8)}`;\n  return raw;\n}\n\nfunction hhmm(raw) {\n  if (!raw) return null;\n  const s = String(raw).replace(/[^\\d]/g, '');\n  if (s.length === 4) return `${s.slice(0,2)}:${s.slice(2,4)}`;\n  return raw;\n}\n\n// Données OCR validées\nconst validated = body.validated_fields || {};\nconst victime = validated.victime || {};\nconst accident = validated.accident || {};\nconst employeur = validated.employeur || {};\nconst temoin = validated.temoin || {};\n\n// Doutes vocaux (from WF3)\nconst vocal = body.vocal_data || {};\n\nreturn {\n  // Identifiants\n  request_id: body.request_id || 'req_' + Date.now(),\n  user_id: body.user_id,\n  customer_email: body.customer_email,\n  payment_id: body.payment_id,\n  \n  // Contexte formaté pour l'IA\n  context: {\n    victime_nom: victime.nom || '{{NOM}}',\n    victime_prenom: victime.prenom || '{{PRENOM}}',\n    accident_date: ddmmyyyy(accident.date) || '{{DATE}}',\n    accident_heure: hhmm(accident.heure),\n    accident_lieu: accident.lieu || '{{LIEU}}',\n    circonstances: accident.circonstances || accident.nature_accident || '',\n    employeur_nom: employeur.nom_raison_sociale || '{{EMPLOYEUR}}',\n    employeur_siret: employeur.siret,\n    temoin_present: !!(temoin.nom),\n    temoin_nom: temoin.nom\n  },\n  \n  // Arguments vocaux enrichis\n  vocal_arguments: vocal.arguments || [],\n  vocal_scenarios: vocal.scenarios || [],\n  vocal_summary: vocal.summary || '',\n  vocal_transcription: vocal.transcription || '',\n  \n  // Type de document\n  document_type: body.document_type || 'AT_normale'\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-2048, 1216],
+      "id": "bdd627d7-d8c7-4b8b-bb2d-df449a77b702",
+      "name": "Extract & Format"
+    },
+    {
+      "parameters": {
+        "prompt": "=RÔLE: Classifier les scénarios de réserves AT/MP.\n\nCONTEXTE ACCIDENT:\n{{ JSON.stringify($json.context) }}\n\nARGUMENTS VOCAUX DU CLIENT:\n{{ JSON.stringify($json.vocal_arguments) }}\n\nTRANSCRIPTION DOUTES:\n{{ $json.vocal_transcription }}\n\nCATÉGORIES POSSIBLES:\n- HORS_HORAIRES: accident hors temps de travail\n- HORS_LIEU: accident hors lieu de travail/mission\n- TIERS: tiers impliqué\n- PREEXISTANTS: état pathologique préexistant\n- SANS_TEMOIN: absence de témoin\n- CIRCONSTANCES_FLOUES: circonstances mal définies\n- DELAI_DECLARATION: délai anormal\n- NON_IMPUTABLE: doutes sur l'imputabilité\n\nRÈGLES:\n- Analyser le contexte ET les arguments vocaux\n- Prioriser les arguments forts\n- Maximum 4 scénarios\n\nRéponds UNIQUEMENT en JSON valide (sans texte avant/après, sans markdown):\n{\"scenarios\": [\"CAT1\", \"CAT2\"], \"justifications\": [{\"scenario\": \"CAT1\", \"reason\": \"...\"}]}",
+        "options": { "maxTokens": 800, "temperature": 0.2 },
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [-1808, 1216],
+      "id": "cbbb09bb-a6b7-4b55-971a-0393c9eef5e3",
+      "name": "Classifier IA",
+      "credentials": {
+        "openAiApi": { "id": "ReY01TMBOwF2KV4Q", "name": "OpenAi account" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse classifier response - robuste\nlet text = $input.first().json.text || '';\n\n// Nettoyer le texte\ntext = text.replace(/```json\\n?/gi, '')\n          .replace(/```\\n?/g, '')\n          .replace(/^[\\s\\S]*?\\{/m, '{')\n          .replace(/\\}[\\s\\S]*$/m, '}')\n          .trim();\n\nconst prev = $('Extract & Format').first().json;\n\ntry {\n  const result = JSON.parse(text);\n  return {\n    scenarios: result.scenarios || ['NON_IMPUTABLE'],\n    justifications: result.justifications || [],\n    ...prev\n  };\n} catch (e) {\n  // Fallback: utiliser les scénarios vocaux ou défaut\n  return {\n    scenarios: prev.vocal_scenarios && prev.vocal_scenarios.length > 0 \n      ? prev.vocal_scenarios \n      : ['NON_IMPUTABLE'],\n    justifications: [],\n    ...prev\n  };\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1568, 1216],
+      "id": "599ac89f-295c-41b2-8a78-32b3616f90e0",
+      "name": "Parse Scénarios"
+    },
+    {
+      "parameters": {
+        "prompt": "=Tu es avocat expert en accidents du travail (AT/MP). Génère une lettre de réserves professionnelle.\n\n=== INFORMATIONS ===\nDESTINATAIRE: CPAM\nVICTIME: {{ $json.context.victime_prenom }} {{ $json.context.victime_nom }}\nDATE ACCIDENT: {{ $json.context.accident_date }}\nHEURE: {{ $json.context.accident_heure || 'Non précisée' }}\nLIEU: {{ $json.context.accident_lieu }}\nEMPLOYEUR: {{ $json.context.employeur_nom }} (SIRET: {{ $json.context.employeur_siret || 'Non précisé' }})\nTÉMOIN: {{ $json.context.temoin_present ? $json.context.temoin_nom : 'Aucun' }}\n\nSCÉNARIOS DE RÉSERVES À DÉVELOPPER:\n{{ $json.scenarios.join(', ') }}\n\nDOUTES EXPRIMÉS:\n{{ $json.vocal_summary || $json.vocal_transcription || 'Aucun commentaire' }}\n\n=== INSTRUCTIONS ===\n1. Rédige une lettre formelle et professionnelle\n2. Structure: Objet → Faits → Réserves motivées → Demande d'enquête\n3. Cite les articles L.411-1 et L.441-1 du CSS si pertinent\n4. Ton mesuré et juridiquement précis\n5. Pas de formulations agressives\n\n=== FORMAT DE SORTIE ===\nRéponds UNIQUEMENT avec le texte de la lettre, sans aucun formatage JSON, sans guillemets autour, sans préfixe.\nCommence directement par l'en-tête de la lettre.",
+        "options": { "maxTokens": 2500, "temperature": 0.3 },
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [-1328, 1216],
+      "id": "3140a620-0ab8-42b6-9bde-f54201e05608",
+      "name": "Writer IA",
+      "credentials": {
+        "openAiApi": { "id": "ReY01TMBOwF2KV4Q", "name": "OpenAi account" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse letter response - ROBUSTE\n// Le Writer IA retourne maintenant du texte brut, pas du JSON\n\nconst rawText = $input.first().json.text || '';\nconst prev = $('Parse Scénarios').first().json;\n\n// Nettoyer le texte de la lettre\nlet letterText = rawText\n  // Supprimer les balises markdown de code\n  .replace(/```[a-z]*\\n?/gi, '')\n  .replace(/```/g, '')\n  // Supprimer les préfixes JSON si l'IA en a mis\n  .replace(/^[\\s]*\\{[\\s]*\"letter_text\"[\\s]*:[\\s]*\"/i, '')\n  .replace(/\"[\\s]*,?[\\s]*\"risk_flags\"[\\s\\S]*$/i, '')\n  .replace(/\"[\\s]*,?[\\s]*\"citations\"[\\s\\S]*$/i, '')\n  .replace(/\"[\\s]*\\}[\\s]*$/i, '')\n  // Nettoyer les échappements JSON résiduels\n  .replace(/\\\\n/g, '\\n')\n  .replace(/\\\\r/g, '')\n  .replace(/\\\\\"/g, '\"')\n  .replace(/\\\\\\\\/g, '\\\\')\n  .trim();\n\n// Si la lettre est vide ou trop courte, c'est un échec\nif (!letterText || letterText.length < 100) {\n  letterText = 'Erreur: La génération de la lettre a échoué. Veuillez réessayer.';\n}\n\n// Détecter les risk flags basés sur le contenu\nconst riskFlags = [];\nif (!letterText.includes('L.411-1') && !letterText.includes('L.441-1')) {\n  riskFlags.push('Pas de citation légale');\n}\nif (letterText.length < 500) {\n  riskFlags.push('Lettre potentiellement trop courte');\n}\n\nreturn {\n  letter_text: letterText,\n  risk_flags: riskFlags,\n  citations: [],\n  scenarios: prev.scenarios,\n  justifications: prev.justifications,\n  request_id: prev.request_id,\n  user_id: prev.user_id,\n  customer_email: prev.customer_email,\n  context: prev.context\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1088, 1216],
+      "id": "cce02cd0-6e08-4c11-9981-4a585e8d6026",
+      "name": "Parse Lettre"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE dossiers SET\n  letter_text = $1,\n  status = 'letter_generated',\n  scenarios = $2::jsonb,\n  updated_at = NOW()\nWHERE request_id = $3\nRETURNING id, request_id, status",
+        "options": {
+          "queryReplacement": "={{ [$json.letter_text, JSON.stringify($json.scenarios), $json.request_id] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [-848, 1216],
+      "id": "postgres-update-dossier",
+      "name": "Update Dossier",
+      "credentials": {
+        "postgres": {
+          "id": "pewhdVfWthgBvQiY",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format Response finale\nconst letterData = $('Parse Lettre').first().json;\nconst dbResult = $input.first().json || {};\n\nreturn {\n  success: true,\n  status: 'draft_ready',\n  letter_text: letterData.letter_text,\n  scenarios: letterData.scenarios,\n  risk_flags: letterData.risk_flags || [],\n  citations: letterData.citations || [],\n  request_id: letterData.request_id,\n  dossier_id: dbResult.id || null,\n  context: letterData.context,\n  message: 'Brouillon généré avec succès.'\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-608, 1216],
+      "id": "20d8e3cc-1326-49f7-8604-1cf7faf870f0",
+      "name": "Format Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Content-Type", "value": "application/json" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-368, 1216],
+      "id": "d1344c47-f563-4c46-aa5e-2b846fea943b",
+      "name": "Réponse"
+    }
+  ],
+  "connections": {
+    "Webhook Lettre": {
+      "main": [[{ "node": "Extract & Format", "type": "main", "index": 0 }]]
+    },
+    "OPTIONS": {
+      "main": [[{ "node": "CORS OK", "type": "main", "index": 0 }]]
+    },
+    "Extract & Format": {
+      "main": [[{ "node": "Classifier IA", "type": "main", "index": 0 }]]
+    },
+    "Classifier IA": {
+      "main": [[{ "node": "Parse Scénarios", "type": "main", "index": 0 }]]
+    },
+    "Parse Scénarios": {
+      "main": [[{ "node": "Writer IA", "type": "main", "index": 0 }]]
+    },
+    "Writer IA": {
+      "main": [[{ "node": "Parse Lettre", "type": "main", "index": 0 }]]
+    },
+    "Parse Lettre": {
+      "main": [[{ "node": "Update Dossier", "type": "main", "index": 0 }]]
+    },
+    "Update Dossier": {
+      "main": [
+        [{ "node": "Format Response", "type": "main", "index": 0 }],
+        [{ "node": "Format Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Format Response": {
+      "main": [[{ "node": "Réponse", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [
+    { "name": "Accidoc" },
+    { "name": "Supabase" }
+  ]
+}
