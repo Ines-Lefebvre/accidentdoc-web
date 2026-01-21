@@ -1,0 +1,184 @@
+{
+  "name": "AccidentDoc - Admin Dossiers API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "admin/dossiers",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-400, 0],
+      "id": "webhook-list-dossiers",
+      "name": "GET Dossiers",
+      "webhookId": "admin-dossiers-list"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "admin/dossiers/:id",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-400, 200],
+      "id": "webhook-get-dossier",
+      "name": "GET Dossier by ID",
+      "webhookId": "admin-dossier-detail"
+    },
+    {
+      "parameters": {
+        "httpMethod": "OPTIONS",
+        "path": "admin/dossiers",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-400, 400],
+      "id": "options-dossiers",
+      "name": "OPTIONS Dossiers",
+      "webhookId": "admin-dossiers-options"
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Access-Control-Allow-Methods", "value": "GET, OPTIONS" },
+              { "name": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-160, 400],
+      "id": "respond-options",
+      "name": "CORS Response"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, request_id, customer_email, customer_name, payment_id, status, document_type, created_at, updated_at, pdf_storage_path, victime_nom, accident_date FROM dossiers ORDER BY created_at DESC LIMIT 100",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [-160, 0],
+      "id": "postgres-list",
+      "name": "List Dossiers",
+      "credentials": {
+        "postgres": {
+          "id": "pewhdVfWthgBvQiY",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT * FROM dossiers WHERE id = '{{ $json.params.id }}' OR request_id = '{{ $json.params.id }}'",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [-160, 200],
+      "id": "postgres-detail",
+      "name": "Get Dossier Detail",
+      "credentials": {
+        "postgres": {
+          "id": "pewhdVfWthgBvQiY",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format list response\nconst items = $input.all();\nconst dossiers = items.map(item => item.json);\n\nreturn {\n  success: true,\n  count: dossiers.length,\n  dossiers: dossiers\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [80, 0],
+      "id": "format-list",
+      "name": "Format List Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format detail response\nconst items = $input.all();\n\nif (items.length === 0 || !items[0].json.id) {\n  return {\n    success: false,\n    error: 'Dossier non trouvé'\n  };\n}\n\nreturn {\n  success: true,\n  dossier: items[0].json\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [80, 200],
+      "id": "format-detail",
+      "name": "Format Detail Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Content-Type", "value": "application/json" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [320, 100],
+      "id": "respond-success",
+      "name": "Respond JSON"
+    }
+  ],
+  "connections": {
+    "GET Dossiers": {
+      "main": [[{ "node": "List Dossiers", "type": "main", "index": 0 }]]
+    },
+    "GET Dossier by ID": {
+      "main": [[{ "node": "Get Dossier Detail", "type": "main", "index": 0 }]]
+    },
+    "OPTIONS Dossiers": {
+      "main": [[{ "node": "CORS Response", "type": "main", "index": 0 }]]
+    },
+    "List Dossiers": {
+      "main": [
+        [{ "node": "Format List Response", "type": "main", "index": 0 }],
+        [{ "node": "Respond JSON", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Dossier Detail": {
+      "main": [
+        [{ "node": "Format Detail Response", "type": "main", "index": 0 }],
+        [{ "node": "Respond JSON", "type": "main", "index": 0 }]
+      ]
+    },
+    "Format List Response": {
+      "main": [[{ "node": "Respond JSON", "type": "main", "index": 0 }]]
+    },
+    "Format Detail Response": {
+      "main": [[{ "node": "Respond JSON", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [
+    { "name": "Accidoc" },
+    { "name": "Admin" }
+  ]
+}
