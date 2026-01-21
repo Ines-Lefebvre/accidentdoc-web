@@ -25,30 +25,47 @@ interface Dossier {
   request_id: string;
   customer_email: string;
   customer_name: string | null;
-  status: "pending" | "validated" | "sent";
+  status: "paid" | "letter_generated" | "lawyer_validated" | "lawyer_rejected" | "email_sent" | "rdv_booked";
   created_at: string;
-  context: {
-    victime_nom?: string;
-    victime_prenom?: string;
-    accident_date?: string;
+  letter_text?: string | null;
+  victime_nom?: string | null;
+  accident_date?: string | null;
+  validated_fields?: {
+    victime?: { nom?: string; prenom?: string };
+    accident?: { date?: string };
   } | null;
 }
 
-const statusConfig = {
-  pending: {
-    label: "En attente",
-    variant: "secondary" as const,
+const statusConfig: Record<string, { label: string; variant: "secondary" | "default" | "outline" | "destructive"; icon: typeof Clock }> = {
+  paid: {
+    label: "Payé - En attente génération",
+    variant: "secondary",
     icon: Clock,
   },
-  validated: {
+  letter_generated: {
+    label: "À valider",
+    variant: "secondary",
+    icon: Clock,
+  },
+  lawyer_validated: {
     label: "Validé",
-    variant: "default" as const,
+    variant: "default",
     icon: CheckCircle,
   },
-  sent: {
+  lawyer_rejected: {
+    label: "Rejeté",
+    variant: "destructive",
+    icon: Clock,
+  },
+  email_sent: {
     label: "Envoyé",
-    variant: "outline" as const,
+    variant: "outline",
     icon: Send,
+  },
+  rdv_booked: {
+    label: "RDV réservé",
+    variant: "default",
+    icon: CheckCircle,
   },
 };
 
@@ -74,11 +91,14 @@ export default async function AdminDashboardPage() {
     console.error("Error fetching dossiers:", error);
   }
 
+  // Dossiers en attente de validation par avocate
   const pendingCount =
-    dossiers?.filter((d) => d.status === "pending").length || 0;
+    dossiers?.filter((d) => d.status === "letter_generated").length || 0;
+  // Dossiers validés mais pas encore envoyés
   const validatedCount =
-    dossiers?.filter((d) => d.status === "validated").length || 0;
-  const sentCount = dossiers?.filter((d) => d.status === "sent").length || 0;
+    dossiers?.filter((d) => d.status === "lawyer_validated").length || 0;
+  // Dossiers envoyés aux clients
+  const sentCount = dossiers?.filter((d) => d.status === "email_sent").length || 0;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -168,11 +188,13 @@ export default async function AdminDashboardPage() {
                 </TableHeader>
                 <TableBody>
                   {dossiers.map((dossier: Dossier) => {
-                    const status = statusConfig[dossier.status] || statusConfig.pending;
+                    const status = statusConfig[dossier.status] || statusConfig.paid;
                     const StatusIcon = status.icon;
-                    const victimeName = dossier.context
-                      ? `${dossier.context.victime_prenom || ""} ${dossier.context.victime_nom || ""}`.trim()
-                      : "-";
+                    // Support both old context format and new flat fields
+                    const victimeName = dossier.victime_nom
+                      || (dossier.validated_fields?.victime
+                          ? `${dossier.validated_fields.victime.prenom || ""} ${dossier.validated_fields.victime.nom || ""}`.trim()
+                          : "-");
 
                     return (
                       <TableRow key={dossier.id}>
@@ -200,7 +222,7 @@ export default async function AdminDashboardPage() {
                         </TableCell>
                         <TableCell>{victimeName || "-"}</TableCell>
                         <TableCell>
-                          {dossier.context?.accident_date || "-"}
+                          {dossier.accident_date || dossier.validated_fields?.accident?.date || "-"}
                         </TableCell>
                         <TableCell>
                           <Badge variant={status.variant}>
@@ -211,7 +233,7 @@ export default async function AdminDashboardPage() {
                         <TableCell className="text-right">
                           <Button asChild size="sm" variant="outline">
                             <Link href={`/admin/dossier/${dossier.id}`}>
-                              {dossier.status === "pending"
+                              {dossier.status === "letter_generated"
                                 ? "Valider"
                                 : "Voir"}
                             </Link>

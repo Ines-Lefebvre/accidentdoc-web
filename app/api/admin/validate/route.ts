@@ -63,9 +63,10 @@ export async function POST(request: NextRequest) {
     const pdfBytes = await generateSignedPDF(letter_text);
 
     // Envoyer l'email avec le PDF en pièce jointe
-    const victimeName = dossier.context
-      ? `${dossier.context.victime_prenom || ""} ${dossier.context.victime_nom || ""}`.trim()
-      : "votre dossier";
+    const victimeName = dossier.victime_nom
+      || (dossier.validated_fields?.victime
+          ? `${dossier.validated_fields.victime.prenom || ""} ${dossier.validated_fields.victime.nom || ""}`.trim()
+          : "votre dossier");
 
     const { error: emailError } = await resend.emails.send({
       from: "AccidentDoc <noreply@accidentdoc.fr>",
@@ -122,10 +123,11 @@ export async function POST(request: NextRequest) {
     const { error: updateError } = await supabase
       .from("dossiers")
       .update({
-        status: "sent",
+        status: "email_sent",
         letter_text: letter_text,
         validated_at: new Date().toISOString(),
         validated_by: user.id,
+        email_sent_at: new Date().toISOString(),
       })
       .eq("id", dossier_id);
 

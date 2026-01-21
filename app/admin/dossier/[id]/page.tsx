@@ -46,15 +46,15 @@ interface Dossier {
   customer_email: string;
   customer_name: string | null;
   letter_text: string;
-  status: "pending" | "validated" | "sent";
+  status: "paid" | "letter_generated" | "lawyer_validated" | "lawyer_rejected" | "email_sent" | "rdv_booked";
   created_at: string;
   validated_at: string | null;
-  context: {
-    victime_nom?: string;
-    victime_prenom?: string;
-    accident_date?: string;
-    accident_lieu?: string;
-    employeur_nom?: string;
+  victime_nom?: string | null;
+  accident_date?: string | null;
+  validated_fields?: {
+    victime?: { nom?: string; prenom?: string };
+    accident?: { date?: string; lieu?: string };
+    employeur?: { nom_raison_sociale?: string };
   } | null;
 }
 
@@ -162,7 +162,7 @@ export default function DossierDetailPage() {
       }
 
       setSuccess("Lettre validée et envoyée au client !");
-      setDossier({ ...dossier, status: "sent" });
+      setDossier({ ...dossier, status: "email_sent" });
       setHasChanges(false);
 
       // Rediriger vers le dashboard après 2 secondes
@@ -209,7 +209,9 @@ export default function DossierDetailPage() {
     );
   }
 
-  const isSent = dossier.status === "sent";
+  const isSent = dossier.status === "email_sent";
+  const isValidated = dossier.status === "lawyer_validated";
+  const canEdit = dossier.status === "letter_generated";
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -231,21 +233,23 @@ export default function DossierDetailPage() {
               variant={
                 isSent
                   ? "outline"
-                  : dossier.status === "validated"
+                  : isValidated
                     ? "default"
                     : "secondary"
               }
             >
               {isSent
                 ? "Envoyé"
-                : dossier.status === "validated"
+                : isValidated
                   ? "Validé"
-                  : "En attente"}
+                  : dossier.status === "letter_generated"
+                    ? "À valider"
+                    : dossier.status}
             </Badge>
           </div>
 
           <div className="flex items-center gap-2">
-            {!isSent && (
+            {canEdit && (
               <>
                 <Button
                   variant="outline"
@@ -336,8 +340,10 @@ export default function DossierDetailPage() {
                 <div>
                   <div className="text-sm font-medium">Victime</div>
                   <div className="text-sm text-muted-foreground">
-                    {dossier.context?.victime_prenom}{" "}
-                    {dossier.context?.victime_nom || "-"}
+                    {dossier.victime_nom ||
+                     (dossier.validated_fields?.victime
+                       ? `${dossier.validated_fields.victime.prenom || ""} ${dossier.validated_fields.victime.nom || ""}`.trim()
+                       : "-")}
                   </div>
                 </div>
               </div>
@@ -347,7 +353,7 @@ export default function DossierDetailPage() {
                 <div>
                   <div className="text-sm font-medium">Date accident</div>
                   <div className="text-sm text-muted-foreground">
-                    {dossier.context?.accident_date || "-"}
+                    {dossier.accident_date || dossier.validated_fields?.accident?.date || "-"}
                   </div>
                 </div>
               </div>
@@ -357,7 +363,7 @@ export default function DossierDetailPage() {
                 <div>
                   <div className="text-sm font-medium">Employeur</div>
                   <div className="text-sm text-muted-foreground">
-                    {dossier.context?.employeur_nom || "-"}
+                    {dossier.validated_fields?.employeur?.nom_raison_sociale || "-"}
                   </div>
                 </div>
               </div>
@@ -415,12 +421,12 @@ export default function DossierDetailPage() {
               <Textarea
                 value={letterText}
                 onChange={(e) => handleTextChange(e.target.value)}
-                disabled={isSent}
+                disabled={!canEdit}
                 className="min-h-[500px] font-mono text-sm resize-none"
                 placeholder="Contenu de la lettre..."
               />
 
-              {hasChanges && !isSent && (
+              {hasChanges && canEdit && (
                 <p className="text-sm text-amber-600 mt-2">
                   Modifications non enregistrées
                 </p>
