@@ -1,0 +1,177 @@
+{
+  "name": "AccidentDoc - Upload PDF to Storage",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "upload-pdf",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "id": "webhook-upload",
+      "name": "Webhook Upload",
+      "webhookId": "upload-pdf-storage"
+    },
+    {
+      "parameters": {
+        "httpMethod": "OPTIONS",
+        "path": "upload-pdf",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 520],
+      "id": "options-preflight",
+      "name": "OPTIONS Preflight",
+      "webhookId": "upload-pdf-options"
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Access-Control-Allow-Methods", "value": "POST, OPTIONS" },
+              { "name": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [220, 520],
+      "id": "respond-options",
+      "name": "Respond OPTIONS"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validation et préparation de l'upload\nconst item = $input.first();\nconst binaryKeys = Object.keys(item.binary || {});\n\nif (binaryKeys.length === 0) {\n  return {\n    json: {\n      error: true,\n      message: 'Aucun fichier reçu'\n    }\n  };\n}\n\nconst fileKey = binaryKeys[0];\nconst file = item.binary[fileKey];\nconst mimeType = file.mimeType || 'application/pdf';\n\n// Vérifier que c'est un PDF ou image\nconst allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];\nif (!allowedTypes.includes(mimeType)) {\n  return {\n    json: {\n      error: true,\n      message: `Type de fichier non autorisé: ${mimeType}`\n    }\n  };\n}\n\n// Générer UUID pour le fichier\nconst uuid = 'pdf_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);\nconst extension = mimeType === 'application/pdf' ? 'pdf' : mimeType.split('/')[1];\nconst fileName = `pending/${uuid}.${extension}`;\n\nreturn {\n  json: {\n    pdf_id: uuid,\n    fileName: fileName,\n    mimeType: mimeType,\n    fileKey: fileKey,\n    fileSize: file.fileSize || 0,\n    error: false\n  },\n  binary: item.binary\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "id": "init-validate",
+      "name": "Init & Validate"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [440, 300],
+      "id": "check-error",
+      "name": "Check Error"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://rwzqnaqaapgitjjsuokf.supabase.co/storage/v1/object/cerfa-documents/{{ $json.fileName }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "={{ $json.fileKey }}",
+        "options": {
+          "response": { "response": { "responseFormat": "json" } },
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 200],
+      "id": "upload-supabase",
+      "name": "Upload to Supabase",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SUPABASE_HEADER_AUTH_ID",
+          "name": "Supabase Service Role"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Construire la réponse succès\nconst initData = $('Init & Validate').first().json;\nconst uploadResult = $input.first().json;\n\nreturn {\n  success: true,\n  pdf_id: initData.pdf_id,\n  storage_path: `cerfa-documents/${initData.fileName}`,\n  file_name: initData.fileName,\n  mime_type: initData.mimeType,\n  file_size: initData.fileSize,\n  bucket: 'cerfa-documents',\n  status: 'pending',\n  message: 'Fichier uploadé avec succès'\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 200],
+      "id": "format-success",
+      "name": "Format Success"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Construire la réponse erreur\nconst initData = $('Init & Validate').first().json;\n\nreturn {\n  success: false,\n  error: initData.message || 'Erreur lors de l\\'upload',\n  pdf_id: null,\n  storage_path: null\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 400],
+      "id": "format-error",
+      "name": "Format Error"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Content-Type", "value": "application/json" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1100, 300],
+      "id": "respond-final",
+      "name": "Respond"
+    }
+  ],
+  "connections": {
+    "Webhook Upload": {
+      "main": [[{ "node": "Init & Validate", "type": "main", "index": 0 }]]
+    },
+    "OPTIONS Preflight": {
+      "main": [[{ "node": "Respond OPTIONS", "type": "main", "index": 0 }]]
+    },
+    "Init & Validate": {
+      "main": [[{ "node": "Check Error", "type": "main", "index": 0 }]]
+    },
+    "Check Error": {
+      "main": [
+        [{ "node": "Format Error", "type": "main", "index": 0 }],
+        [{ "node": "Upload to Supabase", "type": "main", "index": 0 }]
+      ]
+    },
+    "Upload to Supabase": {
+      "main": [[{ "node": "Format Success", "type": "main", "index": 0 }]]
+    },
+    "Format Success": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    },
+    "Format Error": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
