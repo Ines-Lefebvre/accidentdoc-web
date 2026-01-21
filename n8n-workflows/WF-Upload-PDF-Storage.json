@@ -10,8 +10,11 @@
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 300],
-      "id": "webhook-upload",
+      "position": [
+        -656,
+        112
+      ],
+      "id": "43582f19-90b2-42e2-81aa-849a547e5445",
       "name": "Webhook Upload",
       "webhookId": "upload-pdf-storage"
     },
@@ -24,8 +27,11 @@
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 520],
-      "id": "options-preflight",
+      "position": [
+        -656,
+        320
+      ],
+      "id": "aae6df95-cc6f-4a35-b135-112c988772a6",
       "name": "OPTIONS Preflight",
       "webhookId": "upload-pdf-options"
     },
@@ -35,17 +41,29 @@
         "options": {
           "responseHeaders": {
             "entries": [
-              { "name": "Access-Control-Allow-Origin", "value": "*" },
-              { "name": "Access-Control-Allow-Methods", "value": "POST, OPTIONS" },
-              { "name": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              }
             ]
           }
         }
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [220, 520],
-      "id": "respond-options",
+      "position": [
+        -448,
+        320
+      ],
+      "id": "708c68ae-11af-46ed-888b-2c7e089f52c3",
       "name": "Respond OPTIONS"
     },
     {
@@ -54,19 +72,29 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 300],
-      "id": "init-validate",
+      "position": [
+        -448,
+        112
+      ],
+      "id": "07987d41-212c-486e-98b9-1339bcafd278",
       "name": "Init & Validate"
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "leftValue": "={{ $json.error }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "equals" }
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
             }
           ],
           "combinator": "and"
@@ -75,33 +103,47 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [440, 300],
-      "id": "check-error",
+      "position": [
+        -224,
+        112
+      ],
+      "id": "3a44cb28-d7f2-44a4-b060-8f2a9e019e7d",
       "name": "Check Error"
     },
     {
       "parameters": {
         "method": "POST",
         "url": "=https://rwzqnaqaapgitjjsuokf.supabase.co/storage/v1/object/cerfa-documents/{{ $json.fileName }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
         "sendBody": true,
         "contentType": "binaryData",
         "inputDataFieldName": "={{ $json.fileKey }}",
         "options": {
-          "response": { "response": { "responseFormat": "json" } },
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
           "timeout": 30000
         }
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [660, 200],
-      "id": "upload-supabase",
+      "position": [
+        -32,
+        224
+      ],
+      "id": "23594124-e211-494b-9581-6088f29dbc9a",
       "name": "Upload to Supabase",
       "credentials": {
         "httpHeaderAuth": {
-          "id": "SUPABASE_HEADER_AUTH_ID",
-          "name": "Supabase Service Role"
+          "id": "ky1L3tKefy3aLQey",
+          "name": "Mistral OCR"
+        },
+        "supabaseApi": {
+          "id": "ofjzKad4ClZUmtW5",
+          "name": "Supabase Lettres"
         }
       }
     },
@@ -111,8 +153,11 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, 200],
-      "id": "format-success",
+      "position": [
+        192,
+        224
+      ],
+      "id": "2043a879-a4e3-4328-abe0-bebedaebf690",
       "name": "Format Success"
     },
     {
@@ -121,8 +166,11 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 400],
-      "id": "format-error",
+      "position": [
+        112,
+        0
+      ],
+      "id": "2d9dabc0-b399-49b5-b4cb-6247e0f1f922",
       "name": "Format Error"
     },
     {
@@ -132,46 +180,124 @@
         "options": {
           "responseHeaders": {
             "entries": [
-              { "name": "Access-Control-Allow-Origin", "value": "*" },
-              { "name": "Content-Type", "value": "application/json" }
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
             ]
           }
         }
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1100, 300],
-      "id": "respond-final",
+      "position": [
+        448,
+        112
+      ],
+      "id": "a3419473-77a2-4b75-9fb1-aa23ca606339",
       "name": "Respond"
     }
   ],
+  "pinData": {},
   "connections": {
     "Webhook Upload": {
-      "main": [[{ "node": "Init & Validate", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Init & Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "OPTIONS Preflight": {
-      "main": [[{ "node": "Respond OPTIONS", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Respond OPTIONS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Init & Validate": {
-      "main": [[{ "node": "Check Error", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Check Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Check Error": {
       "main": [
-        [{ "node": "Format Error", "type": "main", "index": 0 }],
-        [{ "node": "Upload to Supabase", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Upload to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Upload to Supabase": {
-      "main": [[{ "node": "Format Success", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Format Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Format Success": {
-      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Format Error": {
-      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
+  "active": false,
   "settings": {
-    "executionOrder": "v1"
-  }
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "464c1431-fe63-4fa5-bcf5-53e2da75adea",
+  "meta": {
+    "instanceId": "a5e4c4b07f3d793b359aa15dce255ab809e042c9fce5c285f7e1ede156971b3c"
+  },
+  "id": "zSkSkUAA36BQwJS012nxv",
+  "tags": []
 }
