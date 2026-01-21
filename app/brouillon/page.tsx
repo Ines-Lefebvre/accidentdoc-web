@@ -67,6 +67,10 @@ function BrouillonContent() {
       const extractionData: UploadResponse = JSON.parse(extractionStored);
       const vocalData: VocalResponse | null = vocalStored ? JSON.parse(vocalStored) : null;
 
+      if (!extractionData.payload.extractedData) {
+        throw new Error("Données d'extraction manquantes");
+      }
+
       const validatedFields = {
         victime: extractionData.payload.extractedData.victime,
         accident: extractionData.payload.extractedData.accident,
@@ -81,7 +85,7 @@ function BrouillonContent() {
         customer_email: "",
         validated_fields: validatedFields,
         vocal_data: vocalData || undefined,
-        document_type: extractionData.payload.documentType,
+        document_type: extractionData.payload.documentType || "AT",
       });
 
       if (response.success) {

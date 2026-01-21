@@ -105,6 +105,14 @@ function AnalyseContent() {
     );
   }
 
+  if (!extractionData.payload.extractedData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-destructive">Erreur: données d&apos;extraction manquantes</div>
+      </div>
+    );
+  }
+
   const extractedData: ExtractedData = {
     type: extractionData.payload.documentType as ExtractedData["type"],
     employeur: extractionData.payload.extractedData.employeur,
