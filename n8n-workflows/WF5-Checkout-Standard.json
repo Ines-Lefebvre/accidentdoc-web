@@ -10,10 +10,7 @@
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [
-        -240,
-        0
-      ],
+      "position": [0, 200],
       "id": "webhook-checkout",
       "name": "Webhook Checkout",
       "webhookId": "checkout-standard"
@@ -27,10 +24,7 @@
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [
-        -240,
-        200
-      ],
+      "position": [0, 400],
       "id": "webhook-options",
       "name": "OPTIONS",
       "webhookId": "checkout-standard-options"
@@ -59,60 +53,19 @@
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [
-        0,
-        200
-      ],
+      "position": [240, 400],
       "id": "cors-response",
       "name": "CORS OK"
     },
     {
       "parameters": {
-        "jsCode": "// Validate & Prepare checkout data\nconst body = $input.first().json.body || $input.first().json;\n\n// Validation\nif (!body.customer_email) {\n  return {\n    valid: false,\n    error: 'Email requis'\n  };\n}\n\nif (!body.letter_text) {\n  return {\n    valid: false,\n    error: 'Lettre requise'\n  };\n}\n\nconst requestId = body.request_id || 'req_' + Date.now();\nconst context = body.context || {};\n\n// Préparer les données pour Supabase (stockage avant paiement)\nreturn {\n  valid: true,\n  request_id: requestId,\n  customer_email: body.customer_email,\n  letter_text: body.letter_text,\n  context: context,\n  // Données pour créer le draft dans Supabase\n  supabase_data: {\n    request_id: requestId,\n    customer_email: body.customer_email,\n    letter_text: body.letter_text,\n    status: 'pending_payment',\n    document_type: 'standard',\n    victime_nom: context.victime_nom || null,\n    accident_date: context.accident_date || null,\n    validated_fields: JSON.stringify({\n      victime: {\n        nom: context.victime_nom || '',\n        prenom: context.victime_prenom || ''\n      },\n      accident: {\n        date: context.accident_date || '',\n        lieu: context.accident_lieu || ''\n      },\n      employeur: {\n        nom_raison_sociale: context.employeur_nom || ''\n      }\n    })\n  },\n  // Metadata pour Stripe (limité à 500 chars par champ)\n  stripe_metadata: {\n    type: 'standard',\n    request_id: requestId,\n    customer_email: body.customer_email,\n    victime_nom: (context.victime_nom || '').substring(0, 100),\n    accident_date: (context.accident_date || '').substring(0, 50)\n  }\n};"
+        "jsCode": "// Validate & Prepare checkout data\nconst body = $input.first().json.body || $input.first().json;\n\n// Validation\nif (!body.customer_email) {\n  return {\n    valid: false,\n    error: 'Email requis'\n  };\n}\n\nif (!body.letter_text) {\n  return {\n    valid: false,\n    error: 'Lettre requise'\n  };\n}\n\nconst requestId = body.request_id || 'req_' + Date.now();\nconst context = body.context || {};\n\n// Préparer les données\nreturn {\n  valid: true,\n  request_id: requestId,\n  customer_email: body.customer_email,\n  letter_text: body.letter_text,\n  status: 'pending_payment',\n  document_type: 'standard',\n  victime_nom: context.victime_nom || null,\n  accident_date: context.accident_date || null,\n  validated_fields: JSON.stringify({\n    victime: {\n      nom: context.victime_nom || '',\n      prenom: context.victime_prenom || ''\n    },\n    accident: {\n      date: context.accident_date || '',\n      lieu: context.accident_lieu || ''\n    },\n    employeur: {\n      nom_raison_sociale: context.employeur_nom || ''\n    }\n  })\n};"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        0,
-        0
-      ],
+      "position": [240, 200],
       "id": "validate-input",
       "name": "Validate & Prepare"
-    },
-    {
-      "parameters": {
-        "operation": "upsert",
-        "tableId": "dossiers",
-        "conflictColumns": ["request_id"],
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "request_id": "={{ $json.supabase_data.request_id }}",
-            "customer_email": "={{ $json.supabase_data.customer_email }}",
-            "letter_text": "={{ $json.supabase_data.letter_text }}",
-            "status": "={{ $json.supabase_data.status }}",
-            "document_type": "={{ $json.supabase_data.document_type }}",
-            "victime_nom": "={{ $json.supabase_data.victime_nom }}",
-            "accident_date": "={{ $json.supabase_data.accident_date }}",
-            "validated_fields": "={{ $json.supabase_data.validated_fields }}"
-          }
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.supabase",
-      "typeVersion": 1,
-      "position": [
-        240,
-        -200
-      ],
-      "id": "save-draft-supabase",
-      "name": "Save Draft to Supabase",
-      "credentials": {
-        "supabaseApi": {
-          "id": "SUPABASE_CREDENTIAL_ID",
-          "name": "Supabase AccidentDoc"
-        }
-      }
     },
     {
       "parameters": {
@@ -138,35 +91,87 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [
-        240,
-        0
-      ],
+      "position": [480, 200],
       "id": "check-valid",
       "name": "Is Valid?"
     },
     {
       "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO dossiers (\n  request_id,\n  customer_email,\n  letter_text,\n  status,\n  document_type,\n  victime_nom,\n  accident_date,\n  validated_fields\n) VALUES (\n  '{{ $json.request_id }}',\n  '{{ $json.customer_email }}',\n  '{{ $json.letter_text.replace(/'/g, \"''\") }}',\n  '{{ $json.status }}',\n  '{{ $json.document_type }}',\n  {{ $json.victime_nom ? \"'\" + $json.victime_nom.replace(/'/g, \"''\") + \"'\" : \"NULL\" }},\n  {{ $json.accident_date ? \"'\" + $json.accident_date + \"'\" : \"NULL\" }},\n  '{{ $json.validated_fields }}'::jsonb\n)\nON CONFLICT (request_id) DO UPDATE SET\n  letter_text = EXCLUDED.letter_text,\n  status = EXCLUDED.status,\n  validated_fields = EXCLUDED.validated_fields,\n  updated_at = NOW()\nRETURNING id, request_id",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [720, 100],
+      "id": "postgres-insert-draft",
+      "name": "Insert Draft to Postgres",
+      "credentials": {
+        "postgres": {
+          "id": "pewhdVfWthgBvQiY",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "https://api.stripe.com/v1/checkout/sessions",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "stripeApi",
         "sendBody": true,
         "contentType": "form-urlencoded",
         "bodyParameters": {
           "parameters": [
-            { "name": "mode", "value": "payment" },
-            { "name": "success_url", "value": "=https://accidentdoc.fr/succes?session_id={CHECKOUT_SESSION_ID}&rid={{ $('Validate & Prepare').item.json.request_id }}" },
-            { "name": "cancel_url", "value": "=https://accidentdoc.fr/paiement?cancelled=true&rid={{ $('Validate & Prepare').item.json.request_id }}" },
-            { "name": "customer_email", "value": "={{ $('Validate & Prepare').item.json.customer_email }}" },
-            { "name": "line_items[0][price_data][currency]", "value": "eur" },
-            { "name": "line_items[0][price_data][product_data][name]", "value": "Lettre de réserves AT/MP" },
-            { "name": "line_items[0][price_data][unit_amount]", "value": "8280" },
-            { "name": "line_items[0][quantity]", "value": "1" },
-            { "name": "metadata[type]", "value": "standard" },
-            { "name": "metadata[dossier_id]", "value": "={{ $json.id }}" },
-            { "name": "metadata[request_id]", "value": "={{ $('Validate & Prepare').item.json.request_id }}" },
-            { "name": "metadata[customer_email]", "value": "={{ $('Validate & Prepare').item.json.customer_email }}" }
+            {
+              "name": "mode",
+              "value": "payment"
+            },
+            {
+              "name": "success_url",
+              "value": "=https://accidentdoc.fr/succes?session_id={CHECKOUT_SESSION_ID}&rid={{ $('Validate & Prepare').first().json.request_id }}"
+            },
+            {
+              "name": "cancel_url",
+              "value": "=https://accidentdoc.fr/paiement?cancelled=true&rid={{ $('Validate & Prepare').first().json.request_id }}"
+            },
+            {
+              "name": "customer_email",
+              "value": "={{ $('Validate & Prepare').first().json.customer_email }}"
+            },
+            {
+              "name": "line_items[0][price_data][currency]",
+              "value": "eur"
+            },
+            {
+              "name": "line_items[0][price_data][product_data][name]",
+              "value": "Lettre de réserves AT/MP"
+            },
+            {
+              "name": "line_items[0][price_data][unit_amount]",
+              "value": "8280"
+            },
+            {
+              "name": "line_items[0][quantity]",
+              "value": "1"
+            },
+            {
+              "name": "metadata[type]",
+              "value": "standard"
+            },
+            {
+              "name": "metadata[dossier_id]",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "name": "metadata[request_id]",
+              "value": "={{ $('Validate & Prepare').first().json.request_id }}"
+            },
+            {
+              "name": "metadata[customer_email]",
+              "value": "={{ $('Validate & Prepare').first().json.customer_email }}"
+            }
           ]
         },
         "options": {
@@ -179,16 +184,13 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        480,
-        -100
-      ],
+      "position": [960, 100],
       "id": "create-stripe-session",
       "name": "Create Stripe Session",
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "STRIPE_CREDENTIAL_ID",
-          "name": "Stripe API Key"
+        "stripeApi": {
+          "id": "1YXSgrksQMW16KFj",
+          "name": "Stripe account"
         }
       },
       "onError": "continueRegularOutput"
@@ -199,10 +201,7 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        720,
-        -100
-      ],
+      "position": [1200, 100],
       "id": "format-success",
       "name": "Format Success Response"
     },
@@ -212,10 +211,7 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        480,
-        100
-      ],
+      "position": [720, 300],
       "id": "format-error",
       "name": "Format Error Response"
     },
@@ -241,10 +237,7 @@
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [
-        960,
-        0
-      ],
+      "position": [1440, 200],
       "id": "final-response",
       "name": "Response"
     }
@@ -287,7 +280,7 @@
       "main": [
         [
           {
-            "node": "Save Draft to Supabase",
+            "node": "Insert Draft to Postgres",
             "type": "main",
             "index": 0
           }
@@ -301,7 +294,7 @@
         ]
       ]
     },
-    "Save Draft to Supabase": {
+    "Insert Draft to Postgres": {
       "main": [
         [
           {
@@ -347,8 +340,7 @@
     }
   },
   "settings": {
-    "executionOrder": "v1",
-    "availableInMCP": true
+    "executionOrder": "v1"
   },
   "pinData": {},
   "meta": {
