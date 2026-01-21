@@ -1,0 +1,937 @@
+{
+  "name": "Accident Doc - OCR Mistral + AI Extraction V2 (avec validation)",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// ===== COMPETITION ENTRE GEMINI ET OPENAI =====\nconst allInputs = $input.all();\nconst requestId = $('Init Tracking').first().json.requestId;\nconst startTime = $('Init Tracking').first().json.startTime;\n\nlet geminiResult = null;\nlet openaiResult = null;\n\n// Récupérer les 2 résultats\nif (allInputs.length >= 2) {\n  openaiResult = allInputs[0].json;\n  geminiResult = allInputs[1].json; \n} else if (allInputs.length === 1) {\n  geminiResult = allInputs[0].json;\n  openaiResult = { error: 'OpenAI failed', output: null };\n}\n\n// ===== FONCTION DE SCORING SIMPLIFIÉE =====\nfunction scoreResult(result, modelName) {\n  let score = 0;\n  \n  // Vérifier si le résultat existe et est valide\n  if (!result || !result.output || result.error) {\n    return { model: modelName, totalScore: 0, result: result };\n  }\n  \n  // Compter les champs critiques remplis\n  const critical = [\n    result.output.employeur?.nom_raison_sociale,\n    result.output.employeur?.siret,\n    result.output.victime?.nom,\n    result.output.victime?.prenom,\n    result.output.accident?.date,\n    result.output.type_declaration\n  ];\n  \n  const filled = critical.filter(field => field && String(field).trim() !== '' && String(field).trim() !== 'null').length;\n  score = (filled / critical.length) * 100;\n  \n  // Bonus pour structure complète\n  if (result.output.employeur && Object.keys(result.output.employeur).length > 3) score += 10;\n  if (result.output.victime && Object.keys(result.output.victime).length > 4) score += 10;\n  \n  return {\n    model: modelName,\n    totalScore: Math.round(score),\n    result: result\n  };\n}\n\n// ===== ÉVALUATION =====\nconst geminiScore = scoreResult(geminiResult, 'Gemini');\nconst openaiScore = scoreResult(openaiResult, 'OpenAI');\n\n// ===== SÉLECTION DU GAGNANT =====\nlet winner;\nif (geminiScore.totalScore > openaiScore.totalScore) {\n  winner = geminiScore;\n} else {\n  winner = openaiScore;\n}\n\n// ===== HYBRIDATION SI SCORES PROCHES =====\nif (Math.abs(geminiScore.totalScore - openaiScore.totalScore) < 15 && \n    geminiResult?.output && openaiResult?.output) {\n  \n  // Combiner les meilleurs champs\n  const hybrid = { ...winner.result.output };\n  \n  const loser = (winner.model === 'Gemini') ? openaiResult : geminiResult;\n  \n  // Récupérer champs manquants du perdant\n  if ((!hybrid.employeur?.siret || hybrid.employeur?.siret === 'null') && loser.output?.employeur?.siret && loser.output.employeur.siret !== 'null') {\n    hybrid.employeur.siret = loser.output.employeur.siret;\n  }\n  if ((!hybrid.victime?.numero_secu || hybrid.victime?.numero_secu === 'null') && loser.output?.victime?.numero_secu && loser.output.victime.numero_secu !== 'null') {\n    hybrid.victime.numero_secu = loser.output.victime.numero_secu;\n  }\n  \n  winner.result.output = hybrid;\n}\n\n// ===== VÉRIFICATION FINALE =====\n// IMPORTANT: Utiliser !! pour convertir en boolean\nconst hasOutput = !!winner.result?.output;\nconst hasValidScore = winner.totalScore > 20;\nconst success = hasValidScore && hasOutput;\n\nconsole.log('=== AI COMPETITION ===');\nconsole.log('Gemini:', geminiScore.totalScore);\nconsole.log('OpenAI:', openaiScore.totalScore);\nconsole.log('Winner:', winner.model);\nconsole.log('Success:', success);\n\n// ===== RETOUR COMPATIBLE =====\nreturn {\n  output: winner.result?.output || {},\n  success: success,  // Maintenant c'est un boolean true/false\n  fallback_mode: !success,\n  error_message: success ? '' : 'Both AI failed',\n  elapsed_time: Date.now() - startTime,\n  requestId: requestId,\n  winner_model: winner.model\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-3072, -224],
+      "id": "18b5d413-cf35-4c5c-93e8-c7bec7666587",
+      "name": "AI competition"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [-3312, -224],
+      "id": "f7d34b23-7416-4f66-bd9c-e71203c7472a",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [-3568, -224],
+      "id": "70207540-cbd9-499d-ad22-af70a2776670",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "ReY01TMBOwF2KV4Q",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "text": "=Analysez ce document de déclaration d'accident du travail ou maladie professionnelle et extrayez toutes les informations structurées.\n\nRETOURNEZ UNIQUEMENT un objet JSON valide, sans aucun texte supplémentaire.\n\nDéterminez d'abord le type de déclaration :\n- AT_normale : Déclaration standard d'accident du travail\n- AT_interim : Déclaration pour un travailleur intérimaire  \n- maladie_professionnelle : Déclaration de maladie professionnelle\n\nExtrayez ensuite toutes les informations disponibles dans le document.\n\nTexte du document :\n{{ $json.extracted_text }}",
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"type_declaration\": {\n      \"type\": \"string\",\n      \"enum\": [\"AT_normale\", \"AT_interim\", \"maladie_professionnelle\"],\n      \"description\": \"Type de déclaration identifié\"\n    },\n    \"employeur\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"nom_raison_sociale\": {\"type\": \"string\"},\n        \"adresse\": {\"type\": \"string\"},\n        \"code_postal\": {\"type\": \"string\"},\n        \"siret\": {\"type\": \"string\"},\n        \"telephone\": {\"type\": \"string\"},\n        \"code_risque\": {\"type\": \"string\"}\n      }\n    },\n    \"victime\": {\n      \"type\": \"object\", \n      \"properties\": {\n        \"nom\": {\"type\": \"string\"},\n        \"prenom\": {\"type\": \"string\"},\n        \"numero_secu\": {\"type\": \"string\"},\n        \"date_naissance\": {\"type\": \"string\"},\n        \"adresse\": {\"type\": \"string\"},\n        \"nationalite\": {\"type\": \"string\"},\n        \"profession\": {\"type\": \"string\"},\n        \"qualification\": {\"type\": \"string\"},\n        \"date_embauche\": {\"type\": \"string\"},\n        \"anciennete_poste\": {\"type\": \"string\"},\n        \"type_contrat\": {\"type\": \"string\"}\n      }\n    },\n    \"accident\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"date\": {\"type\": \"string\"},\n        \"heure\": {\"type\": \"string\"},\n        \"lieu\": {\"type\": \"string\"},\n        \"siret_lieu\": {\"type\": \"string\"},\n        \"activite_victime\": {\"type\": \"string\"},\n        \"nature_accident\": {\"type\": \"string\"},\n        \"objet_contact\": {\"type\": \"string\"},\n        \"siege_lesions\": {\"type\": \"string\"},\n        \"nature_lesions\": {\"type\": \"string\"},\n        \"horaire_travail\": {\"type\": \"string\"},\n        \"consequences\": {\"type\": \"string\"},\n        \"arret_travail\": {\"type\": \"boolean\"},\n        \"deces\": {\"type\": \"boolean\"},\n        \"autres_victimes\": {\"type\": \"boolean\"},\n        \"transport_victime\": {\"type\": \"string\"}\n      }\n    },\n    \"temoin\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"nom\": {\"type\": \"string\"},\n        \"prenom\": {\"type\": \"string\"},\n        \"adresse\": {\"type\": \"string\"}\n      }\n    },\n    \"tiers\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"implique\": {\"type\": \"boolean\"},\n        \"nom\": {\"type\": \"string\"},\n        \"adresse\": {\"type\": \"string\"},\n        \"assurance\": {\"type\": \"string\"}\n      }\n    },\n    \"interim\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"entreprise_travail_temporaire\": {\"type\": \"string\"},\n        \"adresse_agence\": {\"type\": \"string\"},\n        \"siret_agence\": {\"type\": \"string\"},\n        \"contrat_numero\": {\"type\": \"string\"},\n        \"date_contrat\": {\"type\": \"string\"}\n      }\n    }\n  },\n  \"required\": [\"type_declaration\", \"employeur\", \"victime\", \"accident\"]\n}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "typeVersion": 1.2,
+      "position": [-3632, -112],
+      "id": "710f2dc2-0a48-44c3-9b28-87d435c8e59a",
+      "name": "GEMINI extraction",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "text": "=Analysez ce document de déclaration d'accident du travail ou maladie professionnelle et extrayez toutes les informations structurées.\n\nRETOURNEZ UNIQUEMENT un objet JSON valide, sans aucun texte supplémentaire.\n\nDéterminez d'abord le type de déclaration :\n- AT_normale : Déclaration standard d'accident du travail\n- AT_interim : Déclaration pour un travailleur intérimaire  \n- maladie_professionnelle : Déclaration de maladie professionnelle\n\nExtrayez ensuite toutes les informations disponibles dans le document.\n\nTexte du document :\n{{ $json.extracted_text }}",
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"type_declaration\": {\n      \"type\": \"string\",\n      \"enum\": [\"AT_normale\", \"AT_interim\", \"maladie_professionnelle\"],\n      \"description\": \"Type de déclaration identifié\"\n    },\n    \"employeur\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"nom_raison_sociale\": {\"type\": \"string\"},\n        \"adresse\": {\"type\": \"string\"},\n        \"code_postal\": {\"type\": \"string\"},\n        \"siret\": {\"type\": \"string\"},\n        \"telephone\": {\"type\": \"string\"},\n        \"code_risque\": {\"type\": \"string\"}\n      }\n    },\n    \"victime\": {\n      \"type\": \"object\", \n      \"properties\": {\n        \"nom\": {\"type\": \"string\"},\n        \"prenom\": {\"type\": \"string\"},\n        \"numero_secu\": {\"type\": \"string\"},\n        \"date_naissance\": {\"type\": \"string\"},\n        \"adresse\": {\"type\": \"string\"},\n        \"nationalite\": {\"type\": \"string\"},\n        \"profession\": {\"type\": \"string\"},\n        \"qualification\": {\"type\": \"string\"},\n        \"date_embauche\": {\"type\": \"string\"},\n        \"anciennete_poste\": {\"type\": \"string\"},\n        \"type_contrat\": {\"type\": \"string\"}\n      }\n    },\n    \"accident\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"date\": {\"type\": \"string\"},\n        \"heure\": {\"type\": \"string\"},\n        \"lieu\": {\"type\": \"string\"},\n        \"siret_lieu\": {\"type\": \"string\"},\n        \"activite_victime\": {\"type\": \"string\"},\n        \"nature_accident\": {\"type\": \"string\"},\n        \"objet_contact\": {\"type\": \"string\"},\n        \"siege_lesions\": {\"type\": \"string\"},\n        \"nature_lesions\": {\"type\": \"string\"},\n        \"horaire_travail\": {\"type\": \"string\"},\n        \"consequences\": {\"type\": \"string\"},\n        \"arret_travail\": {\"type\": \"boolean\"},\n        \"deces\": {\"type\": \"boolean\"},\n        \"autres_victimes\": {\"type\": \"boolean\"},\n        \"transport_victime\": {\"type\": \"string\"}\n      }\n    },\n    \"temoin\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"nom\": {\"type\": \"string\"},\n        \"prenom\": {\"type\": \"string\"},\n        \"adresse\": {\"type\": \"string\"}\n      }\n    },\n    \"tiers\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"implique\": {\"type\": \"boolean\"},\n        \"nom\": {\"type\": \"string\"},\n        \"adresse\": {\"type\": \"string\"},\n        \"assurance\": {\"type\": \"string\"}\n      }\n    },\n    \"interim\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"entreprise_travail_temporaire\": {\"type\": \"string\"},\n        \"adresse_agence\": {\"type\": \"string\"},\n        \"siret_agence\": {\"type\": \"string\"},\n        \"contrat_numero\": {\"type\": \"string\"},\n        \"date_contrat\": {\"type\": \"string\"}\n      }\n    }\n  },\n  \"required\": [\"type_declaration\", \"employeur\", \"victime\", \"accident\"]\n}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "typeVersion": 1.2,
+      "position": [-3632, -384],
+      "id": "e12304e8-4509-454f-86bc-5df04ccd495b",
+      "name": "OPENAI Extraction",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://accidentdoc-web.vercel.app"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, X-Requested-With, Authorization"
+              },
+              {
+                "name": "Access-Control-Max-Age",
+                "value": "600"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-1248, -32],
+      "id": "a4cf3e7b-7f5c-4f51-a5ce-e7080f6ca106",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// CONSTRUCTION DE LA REPONSE FINALE FRONT-READY\nconst input = $input.first().json;\nconst responseForWebsite = input.responseForWebsite;\nconst requestId = input.requestId;\n\n// URL de votre site - MISE À JOUR VERCEL\nconst SITE_URL = 'https://accidentdoc-web.vercel.app';\n\n// Construction de la réponse finale front-ready\nconst finalResponse = {\n  ok: responseForWebsite.success !== false,\n  requestId: requestId,\n  next: responseForWebsite.success !== false ? `${SITE_URL}/validation?rid=${requestId}` : `${SITE_URL}/upload?error=invalid_document`,\n  payload: responseForWebsite\n};\n\nconsole.log('=== FINAL RESPONSE ===');\nconsole.log('Request ID:', requestId);\nconsole.log('Success:', finalResponse.ok);\nconsole.log('Fallback mode:', responseForWebsite.fallback_mode || false);\nconsole.log('Document Type:', responseForWebsite.documentType);\nconsole.log('Session ID:', responseForWebsite.sessionId);\nif (responseForWebsite.completionStats) {\n  console.log('Completion Rate:', responseForWebsite.completionStats.completionRate + '%');\n}\nif (responseForWebsite.errorDetails) {\n  console.log('ERROR:', responseForWebsite.errorDetails.message);\n}\n\nreturn finalResponse;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1440, -32],
+      "id": "2ffaa0d0-9460-4788-952b-108d971fe88a",
+      "name": "Build Front Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// PREPARATION DES DONNEES POUR VALIDATION UTILISATEUR (MODE NORMAL)\nconst finalResult = $input.first().json.resultat_final;\nconst extractedData = finalResult.declaration;\nconst sessionId = 'validation_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);\nconst requestId = $('Init Tracking').first().json.requestId;\n\n// Analyser le type de document pour adapter les champs\nconst docType = extractedData.type;\nconst isInterim = docType === 'AT_INTERIM';\nconst isMaladiePro = docType === 'MALADIE_PROFESSIONNELLE';\n\n// STRUCTURE DES CHAMPS A VALIDER selon le type\nlet fieldsToValidate = [];\n\n// Champs communs\nconst commonFields = [\n  { section: 'employeur', field: 'nom_raison_sociale', label: 'Raison sociale employeur', required: true },\n  { section: 'employeur', field: 'siret', label: 'SIRET employeur', required: true },\n  { section: 'employeur', field: 'adresse', label: 'Adresse employeur', required: true },\n  { section: 'victime', field: 'nom', label: 'Nom de la victime', required: true },\n  { section: 'victime', field: 'prenom', label: 'Prénom de la victime', required: true },\n  { section: 'victime', field: 'numero_secu', label: 'Numéro sécurité sociale', required: true },\n  { section: 'victime', field: 'date_naissance', label: 'Date de naissance', required: true },\n  { section: 'victime', field: 'adresse', label: 'Adresse de la victime', required: true },\n  { section: 'victime', field: 'profession', label: 'Profession', required: true }\n];\n\n// Champs spécifiques selon le type\nif (isMaladiePro) {\n  fieldsToValidate = commonFields.concat([\n    { section: 'maladie', field: 'date', label: 'Date des premiers symptômes', required: true },\n    { section: 'maladie', field: 'lieu', label: 'Lieu d\\'exposition', required: false },\n    { section: 'maladie', field: 'activite_victime', label: 'Activité exposante', required: false }\n  ]);\n} else {\n  fieldsToValidate = commonFields.concat([\n    { section: 'accident', field: 'date', label: 'Date de l\\'accident', required: true },\n    { section: 'accident', field: 'heure', label: 'Heure de l\\'accident', required: true },\n    { section: 'accident', field: 'lieu', label: 'Lieu de l\\'accident', required: true },\n    { section: 'accident', field: 'activite_victime', label: 'Activité au moment de l\\'accident', required: true },\n    { section: 'accident', field: 'nature_accident', label: 'Nature de l\\'accident', required: true },\n    { section: 'accident', field: 'siege_lesions', label: 'Siège des lésions', required: false },\n    { section: 'accident', field: 'nature_lesions', label: 'Nature des lésions', required: false }\n  ]);\n  \n  if (isInterim) {\n    fieldsToValidate = fieldsToValidate.concat([\n      { section: 'interim', field: 'entreprise_travail_temporaire', label: 'Entreprise de travail temporaire', required: true },\n      { section: 'interim', field: 'siret_agence', label: 'SIRET de l\\'agence', required: true }\n    ]);\n  }\n}\n\n// EXTRACTION DES VALEURS ACTUELLES\nconst currentValues = {};\nfor (let i = 0; i < fieldsToValidate.length; i++) {\n  const field = fieldsToValidate[i];\n  const sectionData = extractedData[field.section] || {};\n  const value = sectionData[field.field] || null;\n  \n  const fieldKey = field.section + '.' + field.field;\n  currentValues[fieldKey] = {\n    label: field.label,\n    value: value,\n    section: field.section,\n    field: field.field,\n    required: field.required,\n    isEmpty: !value || String(value).trim() === '',\n    needsValidation: !value || String(value).trim() === '' || field.required\n  };\n}\n\n// CALCUL DES STATISTIQUES\nconst totalFields = fieldsToValidate.length;\nlet filledFields = 0;\nlet requiredFields = 0;\nlet filledRequiredFields = 0;\n\nfor (const fieldKey in currentValues) {\n  const field = currentValues[fieldKey];\n  if (!field.isEmpty) filledFields++;\n  if (field.required) {\n    requiredFields++;\n    if (!field.isEmpty) filledRequiredFields++;\n  }\n}\n\nconst completionRate = Math.round((filledFields / totalFields) * 100);\nconst requiredCompletionRate = Math.round((filledRequiredFields / requiredFields) * 100);\n\n// Questions contextuelles par défaut\nconst contextualQuestions = [\n  {\n    id: 'commentaire_libre',\n    question: 'Souhaitez-vous ajouter un commentaire libre avant la génération de la lettre ?',\n    type: 'textarea',\n    context: 'Commentaire final',\n    category: 'cloture'\n  }\n];\n\n// PREPARATION DE LA REPONSE COMPLETE POUR LE SITE WEB\nconst responseForWebsite = {\n  success: true,\n  fallback_mode: false,\n  sessionId: sessionId,\n  documentType: docType,\n  \n  extractedData: {\n    employeur: extractedData.employeur || {},\n    victime: extractedData.victime || {},\n    accident: isMaladiePro ? null : (extractedData.accident || {}),\n    maladie: isMaladiePro ? (extractedData.maladie || {}) : null,\n    interim: isInterim ? (extractedData.interim || {}) : null,\n    temoin: extractedData.temoin || {},\n    tiers: extractedData.tiers || {}\n  },\n  \n  validationFields: currentValues,\n  contextualQuestions: contextualQuestions,\n  \n  completionStats: {\n    totalFields: totalFields,\n    filledFields: filledFields,\n    completionRate: completionRate,\n    requiredFields: requiredFields,\n    filledRequiredFields: filledRequiredFields,\n    requiredCompletionRate: requiredCompletionRate\n  },\n  \n  nextStep: 'user_validation',\n  instructions: {\n    message: 'Vérifiez et complétez les informations extraites automatiquement.',\n    validationEndpoint: '/webhook/validate-data',\n    expectedFields: fieldsToValidate.map(f => f.section + '.' + f.field)\n  },\n  \n  metadata: {\n    extractionSource: 'mistral_ocr',\n    aiModel: finalResult.metadata.ai_model || 'gemini-2.0-flash',\n    extractionTimestamp: finalResult.timestamp,\n    validationPreparedAt: new Date().toISOString()\n  }\n};\n\nreturn {\n  responseForWebsite: responseForWebsite,\n  requestId: requestId\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1664, -144],
+      "id": "27bfe0bf-1337-48ec-ad85-d0ad46dc9357",
+      "name": "Prepare User Validation"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "final-result",
+              "name": "resultat_final",
+              "type": "object",
+              "value": "={{ {\n  success: true,\n  timestamp: new Date().toISOString(),\n  declaration: $json.declaration_formatee,\n  metadata: {\n    source: 'mistral_ocr',\n    ai_model: 'gemini-2.0-flash',\n    extraction_time: new Date().toISOString()\n  }\n} }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-1824, -144],
+      "id": "baab3f06-7bf8-4eb5-8ac1-aa87362ee8b4",
+      "name": "Final Result"
+    },
+    {
+      "parameters": {
+        "jsCode": "// GESTION ERREUR - DOCUMENT NON CONFORME (type non reconnu par AI)\nconst requestId = $('Init Tracking').first().json.requestId;\nconst sessionId = 'invalid_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);\n\n// Récupérer le type détecté (s'il existe)\nconst detectedType = $input.first().json.output?.type_declaration || 'UNKNOWN';\n\n// Message d'erreur détaillé\nconst errorMessage = `Le document uploadé ne correspond pas à un type de déclaration attendu.\\n\\nType détecté: ${detectedType}\\n\\nTypes acceptés:\\n- AT_normale (Déclaration d'accident du travail standard)\\n- AT_interim (Déclaration d'accident du travail pour intérimaire)\\n- maladie_professionnelle (Déclaration de maladie professionnelle)\\n\\nVeuillez vérifier que vous avez uploadé le bon document.`;\n\nconst invalidDocResponse = {\n  success: false,\n  error_type: 'INVALID_DOCUMENT_TYPE',\n  fallback_mode: false,\n  sessionId: sessionId,\n  documentType: detectedType,\n  \n  errorDetails: {\n    code: 'DOC_TYPE_MISMATCH',\n    message: errorMessage,\n    detectedType: detectedType,\n    expectedTypes: ['AT_normale', 'AT_interim', 'maladie_professionnelle'],\n    suggestion: 'Veuillez uploader une déclaration d\\'accident du travail (intérim ou normale) ou une déclaration de maladie professionnelle.'\n  },\n  \n  nextStep: 'upload_correct_document',\n  instructions: {\n    message: 'Document non conforme. Veuillez uploader un document de type attendu.',\n    uploadEndpoint: '/webhook/upload',\n    acceptedDocumentTypes: [\n      'Déclaration d\\'accident du travail (CERFA 14463)',\n      'Déclaration d\\'accident du travail intérim (CERFA 14463)',\n      'Déclaration de maladie professionnelle (CERFA 60-3950)'\n    ]\n  },\n  \n  metadata: {\n    extractionSource: 'mistral_ocr',\n    aiModel: 'ai_detection',\n    extractionTimestamp: new Date().toISOString(),\n    error_reason: 'Document type not matching expected types',\n    elapsed_time: Date.now() - $('Init Tracking').first().json.startTime\n  }\n};\n\nreturn {\n  responseForWebsite: invalidDocResponse,\n  requestId: requestId\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-2288, 176],
+      "id": "56420ed5-3029-4cc4-80df-c120d47e5d0e",
+      "name": "Build Invalid Document Error"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "format-mp",
+              "name": "declaration_formatee",
+              "type": "object",
+              "value": "={{ {\n  type: 'MALADIE_PROFESSIONNELLE',\n  numero_declaration: 'MP' + new Date().getTime(),\n  date_extraction: new Date().toISOString(),\n  employeur: $json.output.employeur,\n  victime: $json.output.victime,\n  maladie: $json.output.accident,\n  temoin: $json.output.temoin,\n  statut: 'EXTRACTED'\n} }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-2080, -144],
+      "id": "28b24ac1-fa66-4131-b4e3-e0159c8e20b8",
+      "name": "Format Maladie Pro"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "format-at-interim",
+              "name": "declaration_formatee",
+              "type": "object",
+              "value": "={{ {\n  type: 'AT_INTERIM',\n  numero_declaration: 'ATI' + new Date().getTime(),\n  date_extraction: new Date().toISOString(),\n  employeur: $json.output.employeur,\n  victime: $json.output.victime,\n  accident: $json.output.accident,\n  interim: $json.output.interim,\n  temoin: $json.output.temoin,\n  tiers: $json.output.tiers,\n  statut: 'EXTRACTED'\n} }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-2080, -496],
+      "id": "7ebb36d7-57d2-40b5-98e9-f25c798fd55d",
+      "name": "Format AT Intérim"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "format-at-normale",
+              "name": "declaration_formatee",
+              "type": "object",
+              "value": "={{ {\n  type: 'AT_NORMALE',\n  numero_declaration: 'AT' + new Date().getTime(),\n  date_extraction: new Date().toISOString(),\n  employeur: $json.output.employeur,\n  victime: $json.output.victime,\n  accident: $json.output.accident,\n  temoin: $json.output.temoin,\n  tiers: $json.output.tiers,\n  statut: 'EXTRACTED'\n} }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-2080, -320],
+      "id": "188bdc68-19ef-463a-bd1d-fabb6faacf96",
+      "name": "Format AT Normale"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.output.type_declaration }}",
+                    "rightValue": "AT_interim",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "838ae07e-b6c5-4158-a1bb-2f6608f16985"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c1463ff9-09fe-4a2f-9223-25b516ebbf2b",
+                    "leftValue": "={{ $json.output.type_declaration }}",
+                    "rightValue": "AT_normale",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "bd1d2084-5ffc-444c-a108-87329fbf4fb9",
+                    "leftValue": "={{ $json.output.type_declaration }}",
+                    "rightValue": "maladie_professionnelle",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [-2656, -256],
+      "id": "c51ab7e3-c335-4107-b4c6-effd9f1a13e0",
+      "name": "Route by Type"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash-exp",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [-3552, 64],
+      "id": "4523eb8c-6faf-41cc-95bf-fec1f911eb78",
+      "name": "Gemini 2.0 Flash",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "uPkthesEOgAOyuUB",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "text_content",
+              "name": "extracted_text",
+              "type": "string",
+              "value": "={{ $json.pages?.map(page => page.markdown).join('\\n\\n') || '' }}"
+            },
+            {
+              "id": "ocr_success",
+              "name": "ocr_success",
+              "type": "boolean",
+              "value": "={{ $json.pages && $json.pages.length > 0 }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-4032, 128],
+      "id": "2b83eef2-de70-408a-aae8-940b9ae3f0a9",
+      "name": "Format Text"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/ocr",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  \"model\": \"mistral-ocr-latest\",\n  \"document\": {\n    \"type\": \"document_url\",\n    \"document_url\": $json.url\n  },\n  \"include_image_base64\": false\n}) }}",
+        "options": {
+          "timeout": 25000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-4192, 128],
+      "id": "1893012c-2506-4ec0-83b3-879a2c86400a",
+      "name": "Extract OCR",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ky1L3tKefy3aLQey",
+          "name": "Mistral OCR"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "=https://api.mistral.ai/v1/files/{{ $json.id }}/url",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "expiry",
+              "value": "24"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-4400, 128],
+      "id": "09d58179-eccf-4efb-a18d-5a67fabaebae",
+      "name": "Get Signed URL",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ky1L3tKefy3aLQey",
+          "name": "Mistral OCR"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://accidentdoc-web.vercel.app"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, X-Requested-With, Authorization"
+              },
+              {
+                "name": "Access-Control-Max-Age",
+                "value": "600"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-4736, 448],
+      "id": "474115bd-f1fe-4bc4-b666-d9e4b384d2cb",
+      "name": "Respond OPTIONS"
+    },
+    {
+      "parameters": {
+        "httpMethod": "OPTIONS",
+        "path": "upload",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-4944, 448],
+      "id": "51f3ad1c-bb9f-4220-9de4-40b82348d3d3",
+      "name": "OPTIONS Preflight",
+      "webhookId": "options-preflight"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "upload",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-4992, 288],
+      "id": "fb60b218-a2b7-4746-8982-99c1a89ea9cd",
+      "name": "Upload Webhook",
+      "webhookId": "upload-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Init tracking - CONSERVE LES DONNEES BINAIRES\nconst items = $input.all();\n\nfor (const item of items) {\n  item.json.requestId = 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);\n  item.json.startTime = Date.now();\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-4784, 288],
+      "id": "559ede3b-7977-45a1-8328-058db2c5d41d",
+      "name": "Init Tracking"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/files",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "purpose",
+              "value": "ocr"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "file"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [-4592, 288],
+      "id": "9af853c8-ab5b-4304-946e-e50211283927",
+      "name": "Upload to Mistral",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ky1L3tKefy3aLQey",
+          "name": "Mistral OCR"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== VALIDATION DU DOCUMENT DAT =====\n// Vérifie que le document est bien une DAT et qu'il n'y en a qu'une seule\n\nconst extractedText = $json.extracted_text || '';\nconst ocrSuccess = $json.ocr_success || false;\n\n// Si OCR a échoué, on laisse passer pour que l'erreur soit gérée plus loin\nif (!ocrSuccess || !extractedText || extractedText.trim().length < 50) {\n  return {\n    extracted_text: extractedText,\n    ocr_success: ocrSuccess,\n    validation: {\n      is_valid_dat: false,\n      has_multiple_dat: false,\n      error: 'OCR_FAILED'\n    },\n    document_invalide: true,\n    multiple_dat: false,\n    valid: false\n  };\n}\n\n// A) VÉRIFIER QUE C'EST UNE DAT (au moins 3 mots-clés sur 5)\nconst DAT_KEYWORDS = [\n  { pattern: /accident\\s*(du|de)\\s*travail/i, name: 'accident du travail' },\n  { pattern: /d[eé]claration/i, name: 'déclaration' },\n  { pattern: /employeur/i, name: 'employeur' },\n  { pattern: /victime|salari[eé]/i, name: 'victime/salarié' },\n  { pattern: /cerfa|cpam|s[eé]curit[eé]\\s*sociale|caisse.*maladie/i, name: 'CERFA/CPAM/Sécu' }\n];\n\nconst foundKeywords = DAT_KEYWORDS.filter(kw => kw.pattern.test(extractedText));\nconst keywordNames = foundKeywords.map(kw => kw.name);\nconst isValidDAT = foundKeywords.length >= 3;\n\n// B) DÉTECTER PLUSIEURS DAT\n// Pattern numéro de sécu: 1 ou 2 + 13 chiffres (avec ou sans espaces)\nconst secuPattern = /[12]\\s*\\d{2}\\s*\\d{2}\\s*\\d{2}\\s*\\d{3}\\s*\\d{3}\\s*\\d{2}/g;\nconst secuMatches = extractedText.match(secuPattern) || [];\nconst uniqueSecus = [...new Set(secuMatches.map(s => s.replace(/\\s/g, '')))].filter(s => s.length === 15);\n\n// Pattern dates d'accident (cherche \"date\" suivi d'une date)\nconst datePattern = /(\\d{1,2})[\\s\\/\\-\\.](\\d{1,2})[\\s\\/\\-\\.](\\d{2,4})/g;\nlet dateMatches = [];\nlet match;\n\n// Chercher les dates près du mot \"accident\"\nconst accidentSections = extractedText.split(/accident/gi);\nfor (const section of accidentSections.slice(1)) {\n  const sectionDates = section.substring(0, 200).match(datePattern) || [];\n  dateMatches = dateMatches.concat(sectionDates);\n}\nconst uniqueDates = [...new Set(dateMatches)];\n\n// Détecter plusieurs blocs \"employeur\" avec des noms différents\nconst employeurBlocks = extractedText.match(/employeur[^]*?(?=victime|accident|$)/gi) || [];\nconst hasMultipleEmployeurBlocks = employeurBlocks.length > 1;\n\n// Critères de détection multiple DAT\nconst hasMultipleDAT = (\n  uniqueSecus.length > 1 || \n  (uniqueDates.length > 1 && hasMultipleEmployeurBlocks)\n);\n\nconst detectedCount = Math.max(uniqueSecus.length, uniqueDates.length > 1 ? uniqueDates.length : 1);\n\n// C) RÉSULTAT\nreturn {\n  extracted_text: extractedText,\n  ocr_success: ocrSuccess,\n  validation: {\n    is_valid_dat: isValidDAT,\n    has_multiple_dat: hasMultipleDAT,\n    detected_keywords: keywordNames,\n    keyword_count: foundKeywords.length,\n    unique_secu_numbers: uniqueSecus.length,\n    unique_accident_dates: uniqueDates.length,\n    detected_count: detectedCount,\n    secus_found: uniqueSecus,\n    dates_found: uniqueDates\n  },\n  // Flags de routing\n  document_invalide: !isValidDAT,\n  multiple_dat: isValidDAT && hasMultipleDAT,\n  valid: isValidDAT && !hasMultipleDAT\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-3872, 128],
+      "id": "validate-document-v2",
+      "name": "Validate Document"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.document_invalide }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Invalid Doc"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.multiple_dat }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Multiple DAT"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [-3712, 128],
+      "id": "route-validation-v2",
+      "name": "Route Validation"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Erreur: Document non valide (pas une DAT)\nconst validation = $json.validation || {};\nconst requestId = $('Init Tracking').first().json.requestId;\nconst sessionId = 'invalid_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);\n\nconst invalidDocResponse = {\n  success: false,\n  error_type: 'INVALID_DOCUMENT',\n  fallback_mode: false,\n  sessionId: sessionId,\n  \n  errorDetails: {\n    code: 'NOT_A_DAT',\n    message: 'Le document uploadé ne semble pas être une déclaration d\\'accident du travail.',\n    suggestion: 'Veuillez uploader une déclaration d\\'accident du travail (CERFA 14463) ou une déclaration de maladie professionnelle.',\n    detected_keywords: validation.detected_keywords || [],\n    keyword_count: validation.keyword_count || 0,\n    minimum_required: 3\n  },\n  \n  nextStep: 'upload_correct_document',\n  instructions: {\n    message: 'Document non reconnu comme une DAT. Veuillez uploader le bon document.',\n    uploadEndpoint: '/webhook/upload',\n    acceptedDocumentTypes: [\n      'Déclaration d\\'accident du travail (CERFA 14463)',\n      'Déclaration de maladie professionnelle (CERFA 60-3950)'\n    ]\n  },\n  \n  metadata: {\n    extractionSource: 'mistral_ocr',\n    validationStage: 'pre_ai',\n    extractionTimestamp: new Date().toISOString(),\n    elapsed_time: Date.now() - $('Init Tracking').first().json.startTime\n  }\n};\n\nreturn {\n  responseForWebsite: invalidDocResponse,\n  requestId: requestId\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-3520, -48],
+      "id": "build-invalid-doc-error-v2",
+      "name": "Build Invalid Doc Error"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Erreur: Plusieurs DAT détectées dans le document\nconst validation = $json.validation || {};\nconst requestId = $('Init Tracking').first().json.requestId;\nconst sessionId = 'multiple_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);\n\nconst multipleDocResponse = {\n  success: false,\n  error_type: 'MULTIPLE_DAT_DETECTED',\n  fallback_mode: false,\n  sessionId: sessionId,\n  \n  errorDetails: {\n    code: 'MULTIPLE_DECLARATIONS',\n    message: 'Plusieurs déclarations détectées dans votre document. Merci de n\\'uploader qu\\'UNE SEULE déclaration.',\n    detected_count: validation.detected_count || 2,\n    suggestion: 'Séparez vos documents et uploadez-les un par un.',\n    details: {\n      unique_secu_numbers: validation.unique_secu_numbers || 0,\n      unique_accident_dates: validation.unique_accident_dates || 0,\n      secus_found: validation.secus_found || [],\n      dates_found: validation.dates_found || []\n    }\n  },\n  \n  nextStep: 'upload_single_document',\n  instructions: {\n    message: 'Veuillez séparer vos déclarations et uploader un seul document à la fois.',\n    uploadEndpoint: '/webhook/upload',\n    tip: 'Si votre PDF contient plusieurs pages pour la même déclaration, c\\'est normal. Le problème survient uniquement si plusieurs déclarations différentes sont présentes.'\n  },\n  \n  metadata: {\n    extractionSource: 'mistral_ocr',\n    validationStage: 'pre_ai',\n    extractionTimestamp: new Date().toISOString(),\n    elapsed_time: Date.now() - $('Init Tracking').first().json.startTime\n  }\n};\n\nreturn {\n  responseForWebsite: multipleDocResponse,\n  requestId: requestId\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-3520, 128],
+      "id": "build-multiple-dat-error-v2",
+      "name": "Build Multiple DAT Error"
+    }
+  ],
+  "connections": {
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "AI competition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GEMINI extraction": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "OPENAI Extraction": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "OPENAI Extraction",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI competition": {
+      "main": [
+        [
+          {
+            "node": "Route by Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Front Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare User Validation": {
+      "main": [
+        [
+          {
+            "node": "Build Front Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Result": {
+      "main": [
+        [
+          {
+            "node": "Prepare User Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Invalid Document Error": {
+      "main": [
+        [
+          {
+            "node": "Build Front Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Maladie Pro": {
+      "main": [
+        [
+          {
+            "node": "Final Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format AT Intérim": {
+      "main": [
+        [
+          {
+            "node": "Final Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format AT Normale": {
+      "main": [
+        [
+          {
+            "node": "Final Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Type": {
+      "main": [
+        [
+          {
+            "node": "Format AT Intérim",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format AT Normale",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Maladie Pro",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Invalid Document Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini 2.0 Flash": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "GEMINI extraction",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Text": {
+      "main": [
+        [
+          {
+            "node": "Validate Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Document": {
+      "main": [
+        [
+          {
+            "node": "Route Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Validation": {
+      "main": [
+        [
+          {
+            "node": "Build Invalid Doc Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Multiple DAT Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GEMINI extraction",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "OPENAI Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Invalid Doc Error": {
+      "main": [
+        [
+          {
+            "node": "Build Front Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Multiple DAT Error": {
+      "main": [
+        [
+          {
+            "node": "Build Front Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract OCR": {
+      "main": [
+        [
+          {
+            "node": "Format Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Signed URL": {
+      "main": [
+        [
+          {
+            "node": "Extract OCR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OPTIONS Preflight": {
+      "main": [
+        [
+          {
+            "node": "Respond OPTIONS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Webhook": {
+      "main": [
+        [
+          {
+            "node": "Init Tracking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Init Tracking": {
+      "main": [
+        [
+          {
+            "node": "Upload to Mistral",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to Mistral": {
+      "main": [
+        [
+          {
+            "node": "Get Signed URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [
+    {
+      "name": "Accidoc"
+    }
+  ]
+}

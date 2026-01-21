@@ -1,0 +1,483 @@
+{
+  "name": "WF3 - Vocal Cas Graves V5 (Audio + Texte)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wf3-vocal",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1440, 256],
+      "id": "23b97ec4-6dc9-4680-8fbb-8daa0af71bf6",
+      "name": "Webhook",
+      "webhookId": "wf3-vocal-webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "OPTIONS",
+        "path": "wf3-vocal",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1440, 496],
+      "id": "9f4a0eae-b558-4d97-8c77-b07938d3a1b7",
+      "name": "OPTIONS Preflight",
+      "webhookId": "wf3-vocal-options"
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, X-Requested-With, Authorization"
+              },
+              {
+                "name": "Access-Control-Max-Age",
+                "value": "600"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-1216, 496],
+      "id": "3d05c790-350f-4565-b7aa-4a8c51acdb5f",
+      "name": "Respond OPTIONS"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialisation et validation de l'input (audio OU texte)\nconst items = $input.all();\nconst item = items[0];\n\n// Récupérer les données du body\nconst body = item.json.body || item.json;\nconst customerEmail = body.customer_email || body.email || '';\nconst customerName = body.customer_name || body.name || 'Client';\n\n// Vérifier si on a du TEXTE direct\nconst directText = body.text || body.transcription || body.doutes || '';\n\nif (directText && directText.trim().length >= 5) {\n  // Mode TEXTE - pas besoin de Whisper\n  return {\n    json: {\n      requestId: 'text_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),\n      startTime: Date.now(),\n      inputType: 'text',\n      directText: directText.trim(),\n      hasAudio: false,\n      error: false,\n      customerEmail: customerEmail,\n      customerName: customerName\n    }\n  };\n}\n\n// Sinon, vérifier qu'on a un fichier AUDIO\nconst binaryKeys = Object.keys(item.binary || {});\n\nif (binaryKeys.length === 0) {\n  return {\n    json: {\n      error: true,\n      message: 'Aucun texte ni fichier audio reçu',\n      status: 'error',\n      hasAudio: false,\n      inputType: 'none'\n    }\n  };\n}\n\nconst audioKey = binaryKeys[0];\nconst audioFile = item.binary[audioKey];\n\nreturn {\n  json: {\n    requestId: 'vocal_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),\n    startTime: Date.now(),\n    inputType: 'audio',\n    audioKey: audioKey,\n    mimeType: audioFile.mimeType,\n    fileSize: audioFile.fileSize,\n    hasAudio: true,\n    error: false,\n    customerEmail: customerEmail,\n    customerName: customerName\n  },\n  binary: item.binary\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1216, 256],
+      "id": "60d46204-af16-4c1d-8539-dd1f62d5108e",
+      "name": "Init & Validate"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.inputType }}",
+              "rightValue": "audio",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-992, 256],
+      "id": "route-input-type",
+      "name": "Route Input Type"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "whisper-1"
+            },
+            {
+              "name": "language",
+              "value": "fr"
+            },
+            {
+              "name": "response_format",
+              "value": "json"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "={{ $('Init & Validate').first().json.audioKey }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-768, 156],
+      "id": "f0d28db2-ea79-4357-9ce7-eb5166686fd1",
+      "name": "Whisper Transcription",
+      "credentials": {
+        "openAiApi": {
+          "id": "ReY01TMBOwF2KV4Q",
+          "name": "OpenAi account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Traitement de la transcription (audio OU texte direct)\nconst initData = $('Init & Validate').first().json;\n\n// Vérifier erreur d'input\nif (initData.error) {\n  return {\n    success: false,\n    status: 'error',\n    is_grave: false,\n    message: initData.message || 'Erreur input',\n    next_action: 'retry',\n    requestId: initData.requestId || 'unknown'\n  };\n}\n\n// Récupérer la transcription selon le type d'input\nlet transcription = '';\n\nif (initData.inputType === 'text') {\n  // Texte direct - utiliser directement depuis Init & Validate\n  transcription = initData.directText || '';\n} else {\n  // Audio - récupérer depuis Whisper (node précédent)\n  transcription = $json.text || '';\n}\n\nif (!transcription || transcription.trim().length < 5) {\n  return {\n    success: false,\n    status: 'error',\n    is_grave: false,\n    message: 'Texte vide ou trop court (minimum 5 caractères)',\n    next_action: 'retry',\n    requestId: initData.requestId\n  };\n}\n\n// Détection des cas graves\nconst textLower = transcription.toLowerCase();\nconst GRAVE_KEYWORDS = [\n  'décès', 'mort', 'décédé', 'suicide', \n  'harcèlement', 'viol', 'meurtre', \n  'violence', 'agression', 'menace de mort',\n  'tentative de suicide', 'abus'\n];\n\nconst foundKeywords = GRAVE_KEYWORDS.filter(keyword => textLower.includes(keyword));\nconst isGrave = foundKeywords.length > 0;\n\nreturn {\n  success: true,\n  transcription: transcription,\n  is_grave: isGrave,\n  grave_keywords: foundKeywords,\n  requestId: initData.requestId,\n  startTime: initData.startTime,\n  customerEmail: initData.customerEmail,\n  customerName: initData.customerName,\n  inputType: initData.inputType\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-544, 256],
+      "id": "eeb3942f-aac5-44cc-9f07-ec163b163c90",
+      "name": "Process Transcription"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.is_grave }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Grave"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.success }}",
+                    "rightValue": false,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Error"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [-320, 256],
+      "id": "58ad7829-60b8-42f8-9dc1-e5415b779f14",
+      "name": "Route"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Réponse pour CAS GRAVE - Sans Stripe, on retourne les infos pour le frontend\nconst detectData = $('Process Transcription').first().json;\n\nconst appointmentId = 'apt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);\n\nreturn {\n  success: true,\n  status: 'grave_case',\n  is_grave: true,\n  transcription: detectData.transcription,\n  grave_keywords: detectData.grave_keywords,\n  appointmentId: appointmentId,\n  requestId: detectData.requestId,\n  amount_cents: 15000,\n  amount_display: '150€',\n  message: 'Cas grave détecté - Consultation avocat requise',\n  next_action: 'collect_email_then_checkout',\n  inputType: detectData.inputType\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-80, 48],
+      "id": "36a76957-9c35-45bd-89f5-f2b4be02977a",
+      "name": "Response Grave"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Réponse pour erreur\nconst processData = $('Process Transcription').first().json;\n\nreturn {\n  success: false,\n  status: 'error',\n  is_grave: false,\n  message: processData.message || 'Erreur lors du traitement',\n  error_details: processData.error_details || null,\n  next_action: 'retry',\n  requestId: processData.requestId || 'unknown'\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-80, 256],
+      "id": "e98a1cda-e0bb-4da4-8bc8-6a39932674eb",
+      "name": "Response Error"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Tu es un expert juridique en accidents du travail et maladies professionnelles.\n\nAnalyse les doutes exprimés par le client concernant son accident :\n\n\"\"\"\n{{ $json.transcription }}\n\"\"\"\n\nCatégories possibles de réserves :\n- HORS_HORAIRES : accident en dehors des horaires de travail\n- HORS_LIEU : accident hors du lieu de travail habituel\n- TIERS : implication d'un tiers responsable\n- PREEXISTANTS : état de santé préexistant\n- SANS_TEMOIN : absence de témoin\n- CIRCONSTANCES_FLOUES : circonstances mal définies\n- DELAI_DECLARATION : déclaration tardive\n- ABSENCE_LESION_IMMEDIATE : pas de lésion visible immédiatement\n\nRéponds UNIQUEMENT avec un JSON valide (sans markdown, sans ```json) :\n{\n  \"arguments\": [\n    {\n      \"category\": \"CATEGORIE\",\n      \"concern\": \"Description du doute exprimé\",\n      \"strength\": \"fort|moyen|faible\"\n    }\n  ],\n  \"summary\": \"Résumé en 2-3 phrases des points de réserve\",\n  \"scenarios\": [\"Scénario possible 1\", \"Scénario possible 2\"]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [-80, 464],
+      "id": "e590fda6-6507-4beb-b98d-b935ff7ae47a",
+      "name": "Gemini Analysis"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash-001",
+        "options": {
+          "maxOutputTokens": 1500,
+          "temperature": 0.2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [-48, 688],
+      "id": "e06cae85-b160-4db0-b609-1afb430a61e3",
+      "name": "Gemini Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "uPkthesEOgAOyuUB",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Réponse pour cas normal (analysé par Gemini)\nconst geminiResponse = $json.text || $json.output || $json.response || '';\nconst detectData = $('Process Transcription').first().json;\n\n// Nettoyer la réponse Gemini\nlet cleanResponse = String(geminiResponse)\n  .replace(/```json\\s*/gi, '')\n  .replace(/```\\s*/gi, '')\n  .trim();\n\ntry {\n  const analysis = JSON.parse(cleanResponse);\n  \n  return {\n    success: true,\n    status: 'analyzed',\n    is_grave: false,\n    transcription: detectData.transcription,\n    arguments: analysis.arguments || [],\n    summary: analysis.summary || '',\n    scenarios: analysis.scenarios || [],\n    next_action: 'continue_to_letter',\n    elapsed_time: Date.now() - detectData.startTime,\n    inputType: detectData.inputType\n  };\n} catch (parseError) {\n  // Si parsing échoue, retourner quand même la transcription\n  return {\n    success: true,\n    status: 'transcribed_only',\n    is_grave: false,\n    transcription: detectData.transcription,\n    arguments: [],\n    summary: '',\n    scenarios: [],\n    message: 'Analyse IA non disponible, transcription conservée',\n    next_action: 'continue_to_letter',\n    elapsed_time: Date.now() - detectData.startTime,\n    inputType: detectData.inputType\n  };\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 464],
+      "id": "26417984-519a-474e-ad4f-42febb668d35",
+      "name": "Response OK"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, X-Requested-With, Authorization"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [480, 256],
+      "id": "ff559032-f546-44f4-a257-0ca2164ca066",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Init & Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OPTIONS Preflight": {
+      "main": [
+        [
+          {
+            "node": "Respond OPTIONS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Init & Validate": {
+      "main": [
+        [
+          {
+            "node": "Route Input Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Input Type": {
+      "main": [
+        [
+          {
+            "node": "Whisper Transcription",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Transcription",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Whisper Transcription": {
+      "main": [
+        [
+          {
+            "node": "Process Transcription",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Transcription": {
+      "main": [
+        [
+          {
+            "node": "Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route": {
+      "main": [
+        [
+          {
+            "node": "Response Grave",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gemini Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response Grave": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response Error": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Gemini Analysis",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Analysis": {
+      "main": [
+        [
+          {
+            "node": "Response OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response OK": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [
+    {
+      "name": "Accidoc"
+    }
+  ]
+}
