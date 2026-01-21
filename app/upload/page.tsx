@@ -39,7 +39,7 @@ export default function UploadPage() {
       clearInterval(progressInterval);
       setUploadProgress(100);
 
-      if (response.ok) {
+      if (response.ok && response.payload.success) {
         setSuccess(true);
         toast({
           title: "Document analysé",
@@ -58,7 +58,35 @@ export default function UploadPage() {
           router.push(`/analyse?rid=${response.requestId}`);
         }, 1500);
       } else {
-        throw new Error("Échec de l'analyse du document");
+        // Gestion des erreurs typées de n8n
+        const errorType = response.payload?.error_type;
+        let errorMessage: string;
+        let toastDescription: string;
+
+        switch (errorType) {
+          case "INVALID_DOCUMENT":
+            errorMessage = "Ce document ne semble pas être une déclaration d'accident du travail. Veuillez uploader un CERFA 14463.";
+            toastDescription = "Document non reconnu";
+            break;
+          case "MULTIPLE_DAT_DETECTED":
+            errorMessage = "Plusieurs déclarations détectées. Merci de n'uploader qu'un seul document à la fois.";
+            toastDescription = "Plusieurs documents détectés";
+            break;
+          case "INVALID_DOCUMENT_TYPE":
+            errorMessage = response.payload?.errorDetails?.message || "Type de document non reconnu.";
+            toastDescription = "Type de document invalide";
+            break;
+          default:
+            errorMessage = "Échec de l'analyse du document. Veuillez réessayer.";
+            toastDescription = "Erreur d'analyse";
+        }
+
+        setError(errorMessage);
+        toast({
+          title: "Erreur",
+          description: toastDescription,
+          variant: "destructive",
+        });
       }
     } catch (err) {
       console.error("Erreur upload:", err);

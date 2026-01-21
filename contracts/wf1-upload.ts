@@ -38,30 +38,42 @@ export interface Wf1UploadResponse {
   /** Prochaine étape suggérée */
   next?: string;
 
-  /** Payload principal avec les données extraites */
+  /** Payload principal avec les données extraites ou l'erreur */
   payload: {
     success: boolean;
 
+    /** Type d'erreur si success=false */
+    error_type?: "INVALID_DOCUMENT" | "MULTIPLE_DAT_DETECTED" | "INVALID_DOCUMENT_TYPE";
+
+    /** Détails de l'erreur */
+    errorDetails?: {
+      code: string;
+      message: string;
+      suggestion?: string;
+      detected_keywords?: string[];
+      detected_count?: number;
+    };
+
     /** Mode dégradé (extraction partielle) */
-    fallback_mode: boolean;
+    fallback_mode?: boolean;
 
     /** ID de session n8n */
-    sessionId: string;
+    sessionId?: string;
 
     /** Type de document détecté: "AT" (accident travail), "MP" (maladie pro), etc. */
-    documentType: string;
+    documentType?: string;
 
     /** Données extraites par section */
-    extractedData: ExtractedData;
+    extractedData?: ExtractedData;
 
     /** Champs à valider par l'utilisateur */
-    validationFields: Record<string, ValidationField>;
+    validationFields?: Record<string, ValidationField>;
 
     /** Statistiques de complétion */
-    completionStats: CompletionStats;
+    completionStats?: CompletionStats;
 
     /** Prochaine étape dans le parcours */
-    nextStep: string;
+    nextStep?: string;
   };
 }
 

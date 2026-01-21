@@ -1,92 +1,36 @@
-# Accident-Doc
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-Application web pour la génération de lettres de réserves AT/MP (Accidents du Travail / Maladies Professionnelles).
+## Getting Started
 
-## Stack Technique
-
-- **Framework**: Next.js 14 (App Router)
-- **UI**: Tailwind CSS + shadcn/ui
-- **Auth**: Supabase Auth
-- **Base de données**: Supabase (PostgreSQL)
-- **Paiement**: Stripe
-- **Workflows**: n8n (OCR, analyse IA, génération)
-- **Déploiement**: Vercel
-
-## Structure du Projet
-
-```
-accidentdoc-web/
-├── app/
-│   ├── page.tsx              # Landing page
-│   ├── upload/               # Étape 1: Upload CERFA
-│   ├── analyse/              # Étape 2: Résultat + vocal
-│   ├── brouillon/            # Étape 3: Preview lettre
-│   ├── paiement/             # Étape 4: Stripe
-│   ├── confirmation/         # Confirmation
-│   └── avocate/              # Back-office avocate
-├── components/
-│   ├── ui/                   # Composants shadcn/ui
-│   ├── app/                  # Composants métier client
-│   └── avocate/              # Composants back-office
-├── lib/
-│   ├── supabase/             # Clients Supabase
-│   ├── n8n.ts                # API workflows
-│   └── utils.ts              # Utilitaires
-├── hooks/                    # React hooks personnalisés
-└── types/                    # Types TypeScript
-```
-
-## Workflows n8n
-
-| Workflow | Endpoint | Description |
-|----------|----------|-------------|
-| WF1 - OCR | `POST /webhook/upload` | Upload + extraction CERFA |
-| WF3 - Vocal | `POST /webhook/wf3-vocal` | Analyse vocale + détection cas graves |
-| WF4a - Lettre | `POST /webhook/generate-letter` | Génération lettre de réserves |
-| WF4b - Validation | `GET /webhook/validate-letter` | Validation avocat + envoi |
-
-## Installation
+First, run the development server:
 
 ```bash
-# Cloner le repo
-git clone https://github.com/[username]/accidentdoc-web.git
-cd accidentdoc-web
-
-# Installer les dépendances
-npm install
-
-# Copier les variables d'environnement
-cp .env.example .env.local
-
-# Lancer en développement
 npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
 ```
 
-## Variables d'Environnement
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-```env
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-# n8n
-NEXT_PUBLIC_N8N_BASE_URL=https://n8n.srv833062.hstgr.cloud
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-# Stripe
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
-STRIPE_SECRET_KEY=
-STRIPE_WEBHOOK_SECRET=
+## Learn More
 
-# App
-NEXT_PUBLIC_APP_URL=
-```
+To learn more about Next.js, take a look at the following resources:
 
-## Tarification
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-- **Cas standard**: 69€ HT (lettre de réserves)
-- **Cas grave**: 150€ HT (RDV avocat)
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-## Licence
+## Deploy on Vercel
 
-Propriétaire - Tous droits réservés
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
