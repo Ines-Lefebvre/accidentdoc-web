@@ -556,9 +556,52 @@ DO UPDATE SET
 RETURNING id, request_id, status;
 ```
 
-### 7. État des Sprints mis à jour
+### 7. Robustesse Webhook Stripe (WF6 - Stripe Webhook) ✅
 
-- [x] Sprint 6 : Inputs Page 2 + Cas Graves + WF4A V6 + WF5 UPSERT ✅
+**Date :** 22 Janvier 2026 (12:50)
+
+**Problème** : Si le dossier n'existait pas en base lors de la réception du webhook Stripe (ex: échec WF5, timeout, ou concurrence), le paiement était "perdu" et le client ne recevait jamais sa lettre.
+
+**Solution (Blindage)** :
+- Remplacement du nœud SQL `UPDATE` par un `INSERT ... ON CONFLICT (request_id) DO UPDATE`.
+- **Gain** : Le paiement est TOUJOURS enregistré, même si les étapes précédentes ont échoué.
+- **Résultat** : Aucun paiement ne peut être perdu, le dossier est créé ou mis à jour de façon atomique.
+
+**SQL UPSERT appliqué (nœud "Update Dossier (Standard)")** :
+```sql
+INSERT INTO dossiers (
+  request_id,
+  customer_email,
+  customer_name,
+  payment_id,
+  amount_paid,
+  status,
+  created_at,
+  updated_at
+)
+VALUES (
+  '{{ $json.requestId }}',
+  '{{ $json.customerEmail }}',
+  '{{ $json.customerName }}',
+  '{{ $json.paymentIntent }}',
+  {{ $json.amountPaid }},
+  'letter_generated',
+  NOW(),
+  NOW()
+)
+ON CONFLICT (request_id)
+DO UPDATE SET
+  status = 'letter_generated',
+  customer_name = EXCLUDED.customer_name,
+  payment_id = EXCLUDED.payment_id,
+  amount_paid = EXCLUDED.amount_paid,
+  updated_at = NOW()
+RETURNING id, letter_text IS NOT NULL as has_letter;
+```
+
+### 8. État des Sprints mis à jour
+
+- [x] Sprint 6 : Inputs Page 2 + Cas Graves + WF4A V6 + WF5 UPSERT + WF6 UPSERT ✅
 
 ---
 
