@@ -85,14 +85,16 @@ function AnalyseContent() {
       );
       router.push("/paiement?type=grave");
     } else {
-      // Stocker les données vocales/texte et continuer
-      const vocalData = vocalResponse || {
-        success: true,
-        status: "text_only",
-        is_grave: false,
-        transcription: textInput,
-      };
-      sessionStorage.setItem("accidentdoc_vocal", JSON.stringify(vocalData));
+      // Stocker les données vocales si disponibles
+      if (vocalResponse) {
+        sessionStorage.setItem("accidentdoc_vocal", JSON.stringify(vocalResponse));
+      }
+
+      // Stocker les notes textuelles séparément (IMPORTANT pour WF4A)
+      if (textInput.trim()) {
+        sessionStorage.setItem("accidentdoc_user_notes", textInput.trim());
+      }
+
       router.push(`/brouillon?rid=${requestId}`);
     }
   };

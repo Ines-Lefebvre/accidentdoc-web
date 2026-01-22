@@ -22,10 +22,10 @@ import { Badge } from "@/components/ui/badge";
 import { StepIndicator, CLIENT_STEPS } from "@/components/app/step-indicator";
 import {
   generateLetter,
-  type DraftLetterResponse,
   type UploadResponse,
   type VocalResponse,
 } from "@/lib/n8n";
+import type { Wf4LetterResponse, Wf4GraveCaseResponse } from "@/contracts/wf4-letter";
 import { useToast } from "@/components/ui/toaster";
 
 // Labels français pour les scénarios
@@ -48,7 +48,7 @@ function BrouillonContent() {
   const requestId = searchParams.get("rid");
 
   const [isLoading, setIsLoading] = useState(true);
-  const [draftResponse, setDraftResponse] = useState<DraftLetterResponse | null>(null);
+  const [draftResponse, setDraftResponse] = useState<Wf4LetterResponse | null>(null);
   const [letterText, setLetterText] = useState("");
   const [isEdited, setIsEdited] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,6 +57,7 @@ function BrouillonContent() {
   const loadAndGenerateLetter = useCallback(async () => {
     const extractionStored = sessionStorage.getItem("accidentdoc_extraction");
     const vocalStored = sessionStorage.getItem("accidentdoc_vocal");
+    const userNotesStored = sessionStorage.getItem("accidentdoc_user_notes");
 
     if (!extractionStored) {
       router.push("/upload");
@@ -66,6 +67,7 @@ function BrouillonContent() {
     try {
       const extractionData: UploadResponse = JSON.parse(extractionStored);
       const vocalData: VocalResponse | null = vocalStored ? JSON.parse(vocalStored) : null;
+      const userNotes: string | null = userNotesStored || null;
 
       if (!extractionData.payload.extractedData) {
         throw new Error("Données d'extraction manquantes");
@@ -85,11 +87,27 @@ function BrouillonContent() {
         customer_email: "",
         validated_fields: validatedFields,
         vocal_data: vocalData || undefined,
+        user_notes: userNotes || undefined,
         document_type: extractionData.payload.documentType || "AT",
       });
 
+      // Vérifier si c'est un cas grave (redirection Cal.com)
+      if (!response.success && (response as unknown as Wf4GraveCaseResponse).action === "redirect_calcom") {
+        const graveCaseResponse = response as unknown as Wf4GraveCaseResponse;
+        toast({
+          title: "Situation particulière détectée",
+          description: graveCaseResponse.message,
+          variant: "destructive",
+        });
+        // Redirection vers la page de prise de RDV
+        setTimeout(() => {
+          router.push(graveCaseResponse.calcom_url || "/paiement?type=grave");
+        }, 2000);
+        return;
+      }
+
       if (response.success) {
-        setDraftResponse(response);
+        setDraftResponse(response as Wf4LetterResponse);
         setLetterText(response.letter_text);
         toast({ title: "Brouillon généré", description: "Vous pouvez maintenant réviser et modifier la lettre." });
       } else {

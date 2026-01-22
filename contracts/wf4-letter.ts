@@ -36,6 +36,9 @@ export interface Wf4LetterRequest {
   /** Données vocales (si analyse effectuée) */
   vocal_data?: Wf3VocalResponse;
 
+  /** Notes textuelles de l'utilisateur (Zone de texte Page 2) */
+  user_notes?: string;
+
   /** Type de document source */
   document_type: string;
 }
@@ -44,7 +47,18 @@ export interface Wf4LetterRequest {
 // RESPONSE (ce que n8n retourne)
 // ============================================
 
-export type Wf4LetterStatus = "draft_ready" | "error";
+export type Wf4LetterStatus = "draft_ready" | "error" | "grave_case_detected";
+
+/** Réponse en cas de détection d'un cas grave */
+export interface Wf4GraveCaseResponse {
+  success: false;
+  status: "grave_case_detected";
+  action: "redirect_calcom";
+  reason: "grave_case";
+  detected_keywords: string[];
+  message: string;
+  calcom_url: string;
+}
 
 export interface Wf4LetterResponse {
   success: boolean;

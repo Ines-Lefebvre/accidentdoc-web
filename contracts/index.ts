@@ -36,6 +36,7 @@ export type {
   Wf4LetterRequest,
   Wf4LetterResponse,
   Wf4LetterStatus,
+  Wf4GraveCaseResponse,
   Wf4SubmitRequest,
   Wf4SubmitResponse,
 } from "./wf4-letter";

@@ -173,6 +173,7 @@ Le pont `ocr_results` → `dossiers` se fait via :
 - [x] Sprint 3 : Logique Métier (UPSERT WF4A + Détection Cas Graves)
 - [x] Sprint 4 : Ajustement WF5 (UPDATE au lieu d'INSERT) ✅
 - [x] Sprint 5 : Finalisation Admin (Filtrage + Envoi Email) ✅
+- [x] Sprint 6 : Inputs Page 2 + Cas Graves (user_notes envoyé, redirection Cal.com) ✅
 
 ---
 
@@ -438,6 +439,80 @@ Génération PDF + Envoi email Resend → UPDATE (status='email_sent')
 | `lawyer_validated` | (réservé) | Validé mais pas encore envoyé |
 | `email_sent` | API validate | PDF envoyé au client |
 | `rdv_booked` | WF6 cas grave | RDV Cal.com confirmé |
+
+---
+
+## Corrections Sprint 6 (22 janvier 2026)
+
+### 1. Inputs Page 2 non envoyés à WF4A ✅
+
+**Problème résolu** : Les notes textuelles (Textarea) et les données vocales de la Page 2 (/analyse) n'étaient pas transmises au webhook WF4A (/webhook/generate-letter).
+
+**Conséquences du bug** :
+- Détection des cas graves impossible (mots-clés jamais reçus)
+- Lettre non enrichie avec les préoccupations utilisateur
+
+### 2. Solution appliquée
+
+**Fichier `contracts/wf4-letter.ts`** :
+- Ajout du champ `user_notes?: string` dans `Wf4LetterRequest`
+- Ajout du type `Wf4GraveCaseResponse` pour la réponse cas grave
+
+**Fichier `contracts/index.ts`** :
+- Export de `Wf4GraveCaseResponse`
+
+**Fichier `app/analyse/page.tsx` (Page 2)** :
+- Stockage séparé de `user_notes` dans sessionStorage
+```typescript
+// Stocker les notes textuelles séparément (IMPORTANT pour WF4A)
+if (textInput.trim()) {
+  sessionStorage.setItem("accidentdoc_user_notes", textInput.trim());
+}
+```
+
+**Fichier `app/brouillon/page.tsx` (Page 3)** :
+- Récupération de `user_notes` depuis sessionStorage
+- Envoi dans le payload WF4A
+- Gestion de la réponse cas grave avec redirection Cal.com
+
+### 3. Flux de données corrigé
+
+```
+[Page 2 - /analyse]
+    ↓ textInput → sessionStorage.setItem("accidentdoc_user_notes")
+    ↓ vocalResponse → sessionStorage.setItem("accidentdoc_vocal")
+    ↓
+[Page 3 - /brouillon]
+    ↓ Récupère user_notes + vocal_data depuis sessionStorage
+    ↓ POST /webhook/generate-letter avec user_notes
+    ↓
+[WF4A]
+    ├─ CAS GRAVE détecté dans user_notes
+    │   → Réponse { action: "redirect_calcom" }
+    │   → Front redirige vers Cal.com
+    │
+    └─ CAS NORMAL
+        → Génération lettre enrichie avec user_notes
+        → UPSERT dossiers
+```
+
+### 4. Réponse cas grave - Format
+
+```json
+{
+  "success": false,
+  "status": "grave_case_detected",
+  "action": "redirect_calcom",
+  "reason": "grave_case",
+  "detected_keywords": ["suicide", "décès"],
+  "message": "Ce dossier nécessite un accompagnement personnalisé.",
+  "calcom_url": "https://cal.com/accidentdoc/consultation"
+}
+```
+
+### 5. État des Sprints mis à jour
+
+- [x] Sprint 6 : Inputs Page 2 + Cas Graves ✅
 
 ---
 
