@@ -628,3 +628,19 @@ RETURNING id, letter_text IS NOT NULL as has_letter;
 - Decouverte node Supabase mal configure (operation "upsert" inexistante)
 - Reecriture complete WF5 avec node Postgres et SQL INSERT ON CONFLICT
 - Simplification metadata Stripe pour respecter limite 500 chars
+
+### 22/01/2026 - ROLLBACK
+- **Commits revertés** : Sprint 1 (/brouillon) + Sprint 3 (/confirmation) cassaient le build Vercel
+- **Reset vers** : `3ed9cbf` (docs: document WF6 UPSERT fix)
+- **Cause probable** : Incompatibilités package.json ou imports manquants
+
+**Pages à recréer proprement** :
+- [ ] /brouillon - Preview lettre générée
+- [ ] /confirmation - Succès post-paiement + téléchargement PDF
+
+**Fix workflow n8n appliqué (via MCP)** :
+- Workflow "OCR Mistral + AI Extraction V2" : Correction faux positifs "Plusieurs DAT détectées"
+- Nouvelle logique de détection multiple DAT (V3) :
+  - Ignore les SIRETs multiples (normal pour intérim)
+  - Regex CERFA stricte : `N[°o\s]*14463` uniquement
+  - Critères : numéros sécu distincts OU >2 en-têtes employeur OU >1 numéro CERFA
