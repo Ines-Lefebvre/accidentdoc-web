@@ -644,3 +644,61 @@ RETURNING id, letter_text IS NOT NULL as has_letter;
   - Ignore les SIRETs multiples (normal pour intérim)
   - Regex CERFA stricte : `N[°o\s]*14463` uniquement
   - Critères : numéros sécu distincts OU >2 en-têtes employeur OU >1 numéro CERFA
+
+### 22/01/2026 - Deep Debugging OCR Workflow
+
+**Analyse complète de la cascade WF1** :
+
+1. ✅ **Validate Document V3** : Code déployé et vérifié dans n8n
+   - Logique V3 active avec critères stricts (sécu, en-têtes employeur, CERFA)
+   - Passage correct de `extracted_text` depuis "Format Text"
+
+2. ✅ **Nœuds AI (GEMINI + OPENAI)** : Reçoivent bien `$json.extracted_text`
+   - Prompt identique pour les deux modèles
+   - `continueOnFail: true` pour éviter les blocages
+
+3. ✅ **Build Front Response** : Format JSON correct
+   - Retourne `{ ok, requestId, next, payload }`
+   - URL de redirection vers Vercel
+
+4. 🔧 **Save OCR Results** : **BUG CORRIGÉ**
+   - **Problème** : Expressions UUID invalides (tronquées)
+   ```javascript
+   // AVANT (cassé)
+   "id": "`{{ '________-__-4_-__-_________'.replace(//g, ..."
+
+   // APRÈS (corrigé)
+   "id": "={{ crypto.randomUUID() }}"
+   "upload_id": "={{ $('Init Tracking').first().json.requestId }}"
+   "extracted_fields": "={{ JSON.stringify($json.responseForWebsite?.extractedData || {}) }}"
+   ```
+
+**Fichier local mis à jour** : `n8n-workflows/OCR-Mistral-AI-Extraction-V2-WITH-VALIDATION.json`
+
+### 22/01/2026 - FIX CRITIQUE : Crash Workflow n8n au démarrage
+
+**Symptôme** : `WorkflowHasIssuesError` - Le workflow crashait immédiatement avant même de s'exécuter.
+
+**Diagnostic** : 9 erreurs de validation structurelle détectées via `n8n_validate_workflow`.
+
+**Corrections appliquées (via MCP)** :
+
+| Nœud | Problème | Correction |
+|------|----------|------------|
+| **OPTIONS Preflight** | httpMethod "OPTIONS" non supporté par n8n | Supprimé (+ Respond OPTIONS) |
+| **Upload Webhook** | mode `responseNode` sans `onError` | Ajouté `onError: "continueRegularOutput"` |
+| **AI competition** | `return {...}` au lieu de tableau | Changé en `return [{json: {...}}]` |
+| **Validate Document** | mode `runOnceForEachItem` + return objet | Changé en `runOnceForAllItems` + `return [{json: {...}}]` |
+| **Build Invalid Doc Error** | mode `runOnceForEachItem` + return objet | Changé en `runOnceForAllItems` + `return [{json: {...}}]` |
+| **Build Multiple DAT Error** | mode `runOnceForEachItem` + return objet | Changé en `runOnceForAllItems` + `return [{json: {...}}]` |
+| **Build Invalid Document Error** | mode `runOnceForEachItem` + return objet | Changé en `runOnceForAllItems` + `return [{json: {...}}]` |
+
+**Résultat validation** :
+- **errorCount: 0** (contre 9 initialement)
+- **valid: true**
+- 48 warnings non-bloquants (versions obsolètes, suggestions)
+
+**Leçon apprise** :
+- En mode `runOnceForAllItems`, le Code node DOIT retourner `[{json: {...}}]`
+- En mode `runOnceForEachItem`, le Code node peut retourner `{...}` (wrappé auto)
+- n8n ne supporte pas nativement le httpMethod "OPTIONS" sur les webhooks
