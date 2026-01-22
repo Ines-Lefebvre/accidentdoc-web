@@ -532,9 +532,33 @@ Webhook → Extract & Format → Detect Cas Graves → Route
 
 **Statut** : Workflow opérationnel (Status 200).
 
-### 6. État des Sprints mis à jour
+### 6. Robustesse Paiement (WF5 - Stripe Checkout) ✅
 
-- [x] Sprint 6 : Inputs Page 2 + Cas Graves + WF4A V6 ✅
+**Date :** 22 Janvier 2026 (12:40)
+
+**Problème** : Le workflow plantait ("No output data") si le dossier n'existait pas encore en base au moment du clic "Payer" (ex: latence WF4A ou régénération ID front).
+
+**Solution (Blindage)** :
+- Remplacement du nœud SQL `UPDATE` par un `INSERT ... ON CONFLICT (request_id) DO UPDATE`.
+- **Gain** : Garantit qu'un `dossier_id` (UUID) est toujours retourné et envoyé dans les métadonnées Stripe.
+- **Résultat** : Le lien entre le Paiement (WF5) et la Validation (WF6) est incassable.
+
+**SQL UPSERT appliqué** :
+```sql
+INSERT INTO dossiers (request_id, customer_email, status, letter_text, document_type, validated_fields, created_at, updated_at)
+VALUES (...)
+ON CONFLICT (request_id)
+DO UPDATE SET
+  status = 'pending_payment',
+  customer_email = EXCLUDED.customer_email,
+  letter_text = EXCLUDED.letter_text,
+  updated_at = NOW()
+RETURNING id, request_id, status;
+```
+
+### 7. État des Sprints mis à jour
+
+- [x] Sprint 6 : Inputs Page 2 + Cas Graves + WF4A V6 + WF5 UPSERT ✅
 
 ---
 
