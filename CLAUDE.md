@@ -510,9 +510,31 @@ if (textInput.trim()) {
 }
 ```
 
-### 5. État des Sprints mis à jour
+### 5. Debug n8n (WF4A) - Architecture V6 (Simplified) ✅
 
-- [x] Sprint 6 : Inputs Page 2 + Cas Graves ✅
+**Date :** 22 Janvier 2026 (Midi)
+
+**Problème Critique** : Le workflow plantait au nœud "Get Validation ID" (SELECT vide) car le flux ne passait pas par la création d'une entrée dans la table `validations`.
+
+**Solution Appliquée (Bypass)** :
+- Suppression définitive des nœuds "Get Validation ID" et "Save to Letters".
+- Connexion directe : `Parse Lettre` → `Update Dossier` (UPSERT).
+- **Conséquence** : La table `dossiers` devient l'unique source de vérité. Les tables `validations` et `letters` sont désormais obsolètes pour ce flux.
+
+**Architecture V6** :
+```
+Webhook → Extract & Format → Detect Cas Graves → Route
+                                                   ├─ CAS GRAVE → Respond (redirect Cal.com)
+                                                   └─ NORMAL → Classifier IA → Parse Scénarios
+                                                             → Writer IA → Parse Lettre
+                                                             → Update Dossier → Format Response → Réponse
+```
+
+**Statut** : Workflow opérationnel (Status 200).
+
+### 6. État des Sprints mis à jour
+
+- [x] Sprint 6 : Inputs Page 2 + Cas Graves + WF4A V6 ✅
 
 ---
 
