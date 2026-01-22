@@ -702,3 +702,46 @@ RETURNING id, letter_text IS NOT NULL as has_letter;
 - En mode `runOnceForAllItems`, le Code node DOIT retourner `[{json: {...}}]`
 - En mode `runOnceForEachItem`, le Code node peut retourner `{...}` (wrappé auto)
 - n8n ne supporte pas nativement le httpMethod "OPTIONS" sur les webhooks
+
+---
+
+### 22/01/2026 - FIX CRITIQUE : Échec Silencieux OCR Mistral
+
+**Symptôme** : Workflow exécuté en ~285ms (impossible pour un vrai OCR), retourne "Document invalide" au lieu d'une erreur technique.
+
+**Diagnostic** :
+- Les 3 nœuds API Mistral avaient `continueOnFail: true` → masquait les erreurs 401/429/500
+- Le workflow continuait avec des données vides
+- `Validate Document` recevait un texte vide et déclenchait `document_invalide = true`
+- L'utilisateur voyait "Document invalide" au lieu de "Erreur technique d'analyse"
+
+**Corrections appliquées (via MCP)** :
+
+| Nœud | Avant | Après |
+|------|-------|-------|
+| **Upload to Mistral** | `onError: "continueRegularOutput"` | `onError: "stopWorkflow"` |
+| **Get Signed URL** | `continueOnFail: true` | `onError: "stopWorkflow"` |
+| **Extract OCR** | `continueOnFail: true` | `onError: "continueErrorOutput"` |
+
+**Nouveau nœud ajouté** : `Build OCR Error Response`
+- Connecté à la sortie d'erreur (main[1]) de `Extract OCR`
+- Génère un message d'erreur user-friendly selon le code HTTP :
+  - 401 → "Erreur d'authentification avec le service OCR"
+  - 429 → "Service OCR temporairement surchargé"
+  - 413 → "Fichier trop volumineux"
+  - 5xx → "Service OCR temporairement indisponible"
+- Route vers `Build Front Response` pour retourner l'erreur au frontend
+
+**Flux d'erreur corrigé** :
+```
+[Upload to Mistral] → ERREUR → Workflow STOP (erreur explicite)
+[Get Signed URL]    → ERREUR → Workflow STOP (erreur explicite)
+[Extract OCR]       → ERREUR → [Build OCR Error Response] → [Build Front Response]
+                                     ↓
+                              Message user-friendly au frontend
+```
+
+**Leçon apprise** :
+- `continueOnFail: true` masque TOUTES les erreurs → "échec silencieux"
+- Pour les APIs critiques, utiliser `onError: "stopWorkflow"` ou `onError: "continueErrorOutput"`
+- Un temps d'exécution anormalement court (<1s pour OCR) indique souvent un échec API masqué
