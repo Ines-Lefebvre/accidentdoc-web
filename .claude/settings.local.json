@@ -9,7 +9,12 @@
       "Bash(npm install)",
       "Bash(ls:*)",
       "mcp__n8n-controller__execute_workflow",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "mcp__memory__search_nodes",
+      "Bash(powershell -Command \"Get-Content ''mcp-n8n-controller-get_workflow-1769074184922.txt'' | ConvertFrom-Json | ForEach-Object { $_text } | ConvertFrom-Json | Select-Object -ExpandProperty nodes | Where-Object { $_type -match ''supabase|postgres'' -or $_name -match ''Supabase|Postgres|Insert|Database'' } | ConvertTo-Json -Depth 10\")",
+      "Bash(powershell -Command \"$content = Get-Content ''C:\\\\Users\\\\franck.ATEXYA.000\\\\.claude\\\\projects\\\\C--Users-franck-ATEXYA-000-Documents-accidentdoc-v2\\\\3ffbff67-bc5d-4a41-98dd-d70ee06264ff\\\\tool-results\\\\mcp-n8n-controller-get_workflow-1769074184922.txt'' -Raw; $json = $content | ConvertFrom-Json; $workflow = $json[0].text | ConvertFrom-Json; $workflow.nodes | Where-Object { $_type -match ''supabase|postgres'' -or $_name -match ''Supabase|Postgres|Insert|Database'' } | ConvertTo-Json -Depth 10\")",
+      "Bash(findstr:*)",
+      "Bash(git add:*)"
     ]
   }
 }

@@ -86,10 +86,12 @@ export default async function AdminDashboardPage() {
     redirect("/admin/login");
   }
 
-  // Récupérer les dossiers
+  // Récupérer les dossiers PAYÉS uniquement (pas les brouillons ni pending_payment)
+  // Statuts visibles : letter_generated, lawyer_validated, email_sent, rdv_booked
   const { data: dossiers, error } = await supabase
     .from("dossiers")
     .select("*")
+    .in("status", ["letter_generated", "lawyer_validated", "email_sent", "rdv_booked"])
     .order("created_at", { ascending: false });
 
   if (error) {
